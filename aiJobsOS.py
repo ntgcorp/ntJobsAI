@@ -1,1703 +1,1330 @@
-# aiJobsOS.py
-# Sistema di automazione batch ntJobsOS
-# Principale classe acJobsOS e logica di orchestrazione
-
 import os
 import sys
 import time
-import shutil
-import json
 import subprocess
-from typing import Dict, List, Tuple, Any, Optional
-import configparser
-from pathlib import Path
+import json
 
-# Importa le librerie di supporto
+# Import librerie di supporto
 import aiSys
-from ncMailSimple import NC_MailSimple
-
-# ============================================================================
-# CLASSE PRINCIPALE acJobsOS
-# ============================================================================
+from aiDictToString import acDictToString
 
 class acJobsOS:
-    """
-    Classe principale di ntJobsOS per l'orchestrazione di elaborazioni batch.
-    """
-    
     def __init__(self):
-        """Inizializza l'oggetto acJobsOS."""
-        sProc = "__init__"
+        self.sProc = "acJobsOS.__init__"
         
-        try:
-            # Campi principali
-            self.sJobPath = ""
-            self.sJob = ""
-            self.sJobsFile = ""
-            self.asJobs = []
-            self.asJobFiles = []
-            
-            # Dizionari di configurazione
-            self.dictConfig = {}
-            self.dictJobs = {}
-            self.dictJob = {}
-            self.dictPaths = {}
-            self.asPaths = []
-            
-            # Gestione utenti e gruppi
-            self.asUsers = []
-            self.dictUser = {}
-            self.sUser = ""
-            
-            # Gestione azioni
-            self.asActions = []
-            self.sAction = ""
-            self.sActionIni = ""
-            self.dictAction = {}
-            self.sActionPath = ""
-            self.sScript = ""
-            
-            # Campi DAT e TAB (array e dizionari)
-            self.JOBS_DAT_USERS = [
-                "USER_ID", "USER_PASSWORD", "USER_NAME", "USER_NOTES",
-                "USER_GROUPS", "USER_PATHS", "USER_MAIL"
-            ]
-            
-            self.JOBS_DAT_GROUPS = [
-                "GROUP_ID", "GROUP_NAME", "GROUP_NOTES"
-            ]
-            
-            self.JOBS_DAT_ACTIONS = [
-                "ACT_ID", "ACT_NAME", "ACT_GROUPS", "ACT_SCRIPT",
-                "ACT_ENABLED", "ACT_PATH", "ACT_HELP", "ACT_TIMEOUT"
-            ]
-            
-            self.JOBS_DAT_CONFIG = [
-                "ADMIN.EMAIL", "TYPE", "SYSROOT", "INBOX", "ARCHIVE", "MAIL.ENGINE"
-            ]
-            
-            self.JOBS_DAT_CONFIG_SMTP = [
-                "SMTP.FROM", "SMTP.PASSWORD", "SMTP.PORT", "SMTP.SERVER",
-                "SMTP.SSL", "SMTP.TLS", "SMTP.USER"
-            ]
-            
-            # Tabelle (dizionari di dizionari)
-            self.JOBS_TAB_USERS = {}
-            self.JOBS_TAB_GROUPS = {}
-            self.JOBS_TAB_ACTIONS = {}
-            self.JOBS_TAB_CONFIG = {}
-            
-            # Campi associati all'utente corrente
-            self.dictUser = {}
-            self.sUser = ""
-            
-            # Campi vari interni
-            self.bExitJob = False
-            self.bExitOS = False
-            self.jLog = aiSys.acLog()
-            self.jIni = configparser.ConfigParser()
-            self.jIni.optionxform = str  # Mantieni case originale
-            
-            # Mail engine
-            self.jMail = None
-            self.sMailEngine = ""
-            self.sMailAdmin = ""
-            
-            # Timestamps
-            self.tsStart = ""
-            self.tsJobs = ""
-            self.tsJob = ""
-            
-            # Processi
-            self.pidJob = None
-            
-            # Paths di sistema (inizializzati da config)
-            self.sSys_PathRoot = ""
-            self.sSys_PathInbox = ""
-            self.sSys_PathArchive = ""
-            self.sSys_PathOlk = ""
-            self.sSys_Olk = ""
-            
-            # Contatori e timeout
-            self.nCycleCounter = 0
-            self.nCycleWait = 60
-            
-            print(f"{sProc}: Inizializzazione acJobsOS completata")
-            
-        except Exception as e:
-            print(f"{sProc}: Errore - {str(e)}")
-            raise
-    
-    # ========================================================================
-    # METODI DI INIZIALIZZAZIONE
-    # ========================================================================
-    
-    def Start(self) -> str:
-        """
-        Inizializza l'applicazione ntJobsOS.
+        # Inizializzazione campi principali
+        self.sSys_PathRoot = os.path.dirname(os.path.abspath(__file__))
         
-        Returns:
-            str: Stringa vuota se successo, stringa di errore altrimenti
-        """
+        # Campi JOBS_DAT_*
+        self.JOBS_DAT_USERS = ["USER_ID", "USER_PASSWORD", "USER_NAME", "USER_NOTES", 
+                              "USER_GROUPS", "USER_PATHS", "USER_MAIL"]
+        self.JOBS_DAT_GROUPS = ["GROUP_ID", "GROUP_NAME", "GROUP_NOTES"]
+        self.JOBS_DAT_ACTIONS = ["ACT_ID", "ACT_NAME", "ACT_GROUPS", "ACT_SCRIPT", 
+                                "ACT_ENABLED", "ACT_PATH", "ACT_HELP", "ACT_TIMEOUT"]
+        self.JOBS_DAT_CONFIG_SMTP = ["SMTP.FROM", "SMTP.PASSWORD", "SMTP.PORT", 
+                                    "SMTP.SERVER", "SMTP.SSL", "SMTP.TLS", "SMTP.USER"]
+        
+        # Campi JOBS_TAB_*
+        self.JOBS_TAB_CONFIG = None
+        self.JOBS_TAB_USERS = None
+        self.JOBS_TAB_GROUPS = None
+        self.JOBS_TAB_ACTIONS = None
+        
+        # Campi di lavoro
+        self.dictConfig = {}
+        self.dictJobs = {}
+        self.dictJobsConfig = {}
+        self.dictJob = None
+        self.dictPaths = {}
+        self.dictUser = None
+        self.dictAction = None
+        
+        self.sUser = ""
+        self.sAction = ""
+        self.sActionPath = ""
+        self.sScript = ""
+        self.sJob = ""
+        self.sJobsPath = ""
+        self.sJobsFile = ""
+        
+        # Array di supporto
+        self.asJobs = []
+        self.asJobFiles = []
+        self.asPaths = []
+        self.asUsers = []
+        self.asActions = []
+        self.asGroups = []
+        
+        # Flag di controllo
+        self.bExitJob = False
+        self.bExitOS = False
+        
+        # Istance helper
+        self.jLog = None
+        self.jDTS = None
+        self.jMail = None
+        
+        # Campi temporali e contatori
+        self.tsStart = ""
+        self.sJobTS = ""
+        self.nCycleCounter = 0
+        self.nCycleWait = 60
+        
+        # Campi mail
+        self.sMailEngine = ""
+        self.sMailAdmin = ""
+        self.sSys_PathInbox = ""
+        self.sSys_PathArchive = ""
+        self.sSys_PathOlk = ""
+        self.sSys_Olk = ""
+        
+        # Processo esterno
+        self.pidJob = None
+        
+        print("Inizializzata istanza acJobsOS")
+
+    # =========================================================================
+    # METODI DI STARTUP
+    # =========================================================================
+    def Start(self):
         sProc = "Start"
         sResult = ""
-        
-        print(f"Esecuzione ntjobsos {sProc}")
+        print(f"Esecuzione aiJobsOS {sProc}")
         
         try:
-            # Inizializza timestamp
+            # Inizializzazione timestamp
             self.tsStart = aiSys.Timestamp()
             
-            # Configura log
-            sLogFile = self.Config("LOG")
-            self.jLog.Start(sLogFile)
+            # Istanza DTS
+            self.jDTS = acDictToString()
+            print("Istanziata DTS")
             
-            # Inizializza configparser
-            self.jIni = configparser.ConfigParser()
-            self.jIni.optionxform = str
+            # Istanza LOG
+            sLogFile = self.Config("LOG")
+            if sLogFile == "":
+                sLogFile = aiSys.PathMake(self.sSys_PathRoot, "aiSysJobOS", "log")
+            
+            self.jLog = aiSys.acLog()
+            sResult = self.jLog.Start(sLogFile)
+            if sResult != "":
+                return f"{sProc}: {sResult}"
+            print("Istanziata LOG")
             
             # Sequenza di inizializzazione
-            sResult = self.Start_ReadIni()
-            if sResult:
-                return sProc + ": " + sResult
+            methods = [
+                self.Start_ReadIni,
+                self.Start_ReadDat,
+                self.Start_ReadPaths,
+                self.Start_Expand,
+                self.Start_Verify,
+                self.Start_Mail
+            ]
             
-            # Inizializza variabili da config
-            self.sSys_PathRoot = self.Config("SYSROOT")
+            for method in methods:
+                sResult = method()
+                if sResult != "":
+                    self.Log1(sResult)
+                    self.Start_End()
+                    return f"{sProc}: {sResult}"
+            
+            print("aiJobsOS inizializzato con successo")
+            
+        except Exception as e:
+            sResult = f"Eccezione in {sProc}: {str(e)}"
+            self.Log1(sResult)
+        
+        return sResult
+
+    def Start_ReadIni(self):
+        sProc = "Start_ReadIni"
+        sResult = ""
+        print(f"Esecuzione aiJobsOS {sProc}")
+        
+        try:
+            sFileIni = aiSys.PathMake(self.sSys_PathRoot, "ntjobs_config", "ini")
+            print(f"Lettura file {sFileIni}")
+            
+            sResult, dictTemp = aiSys.read_ini_to_dict(sFileIni)
+            if sResult != "":
+                self.Log1(sResult)
+                return f"{sProc}: {sResult}"
+            
+            # Impostazioni di default
+            print("Impostazioni di default")
+            sLogFile = aiSys.PathMake(self.sSys_PathRoot, "aiSysJobOS", "log")
+            
+            defaults = [
+                ("PATHROOT", self.sSys_PathRoot),
+                ("TIMEOUT", "60"),
+                ("EXPAND", "True"),
+                ("MAIL.ENGINE", "SMTP"),
+                ("LOG", sLogFile)
+            ]
+            
+            # Verifica/inserimento chiavi mancanti
+            for sKey, sValue in defaults:
+                if sKey not in dictTemp:
+                    sResult = aiSys.ConfigSet(dictTemp, sKey, sValue)
+                    if sResult != "":
+                        self.Log1(sResult)
+                        return f"{sProc}: {sResult}"
+            
+            # Espansione dizionario
+            dictTemp2 = dictTemp.copy()
+            sResult = aiSys.ExpandDict(dictTemp, dictTemp2)
+            if sResult != "":
+                self.Log1(sResult)
+                return f"{sProc}: {sResult}"
+            
+            # Assegnazione a JOBS_TAB_CONFIG
+            self.JOBS_TAB_CONFIG = dictTemp2.copy()
+            
+            # Aggiornamento configurazione
+            sResult = self.ConfigUpdate()
+            if sResult != "":
+                self.Log1(sResult)
+                return f"{sProc}: {sResult}"
+            
+            # Inizializzazione campi da config
             self.sSys_PathInbox = self.Config("INBOX")
             self.sSys_PathArchive = self.Config("ARCHIVE")
-            
-            # Contatori
             self.nCycleCounter = 0
+            
             sTemp = self.Config("CYCLE.WAIT")
-            if not sTemp:
+            if sTemp == "":
                 self.nCycleWait = 60
             else:
                 self.nCycleWait = aiSys.StringToNum(sTemp)
             
-            # Aggiorna configurazione
-            self.ConfigUpdate()
-            
-            # Continua inizializzazione
-            sResult = self.Start_ReadDat()
-            if sResult:
-                return sProc + ": " + sResult
-            
-            sResult = self.Start_ReadPaths()
-            if sResult:
-                return sProc + ": " + sResult
-            
-            sResult = self.Start_Verify()
-            if sResult:
-                return sProc + ": " + sResult
-            
-            sResult = self.Start_Mail()
-            if sResult:
-                return sProc + ": " + sResult
-            
-            self.jLog.Log1(f"Inizializzazione ntJobsOS completata: {self.tsStart}")
-            return sResult
+            print("Caricata CONFIG.INI")
+            print("Dizionario letto ed espanso")
+            aiSys.DictPrint(self.dictConfig)
             
         except Exception as e:
-            sResult = f"{sProc}: Errore - {str(e)}"
-            self.Start_End()
-            return sProc + ": " + sResult
-    
-    def Start_ReadIni(self) -> str:
-        """
-        Legge il file di configurazione ntjobs_config.ini.
+            sResult = f"Eccezione in {sProc}: {str(e)}"
+            self.Log1(sResult)
         
-        Returns:
-            str: Stringa vuota se successo, stringa di errore altrimenti
-        """
-        sProc = "Start_ReadIni"
-        sResult = ""
-        
-        print(f"Esecuzione ntjobsos {sProc}")
-        
-        try:
-            # Determina path del file config
-            sConfigFile = os.path.join(os.path.dirname(os.path.abspath(__file__)), "ntjobs_config.ini")
-            
-            if not os.path.exists(sConfigFile):
-                sResult = f"File di configurazione non trovato: {sConfigFile}"
-                self.jLog.Log1(sResult)
-                return sResult
-            
-            # Leggi file INI
-            self.jIni.read(sConfigFile, encoding='utf-8')
-            
-            # Converti in dizionario
-            self.JOBS_TAB_CONFIG = {}
-            for section in self.jIni.sections():
-                self.JOBS_TAB_CONFIG[section] = {}
-                for key, value in self.jIni.items(section):
-                    self.JOBS_TAB_CONFIG[section][key] = value
-            
-            # Verifica sezione CONFIG
-            if "CONFIG" not in self.JOBS_TAB_CONFIG:
-                sResult = "Sezione CONFIG non trovata in ntjobs_config.ini"
-                self.jLog.Log1(sResult)
-                return sResult
-            
-            # Copia sezione CONFIG come dizionario principale
-            self.dictConfig = self.JOBS_TAB_CONFIG["CONFIG"].copy()
-            
-            # Aggiorna configurazione
-            self.ConfigUpdate()
-            
-            # Verifica settings obbligatori
-            missing_keys = []
-            for key in self.JOBS_DAT_CONFIG:
-                if key not in self.dictConfig:
-                    missing_keys.append(key)
-            
-            if missing_keys:
-                sResult = f"Settings obbligatori mancanti: {', '.join(missing_keys)}"
-                self.jLog.Log1(sResult)
-                return sResult
-            
-            # Imposta valori default se mancanti
-            if not self.Config("TIMEOUT"):
-                self.ConfigSet("TIMEOUT", "60")
-            
-            if not self.Config("EXPAND"):
-                self.ConfigSet("EXPAND", "True")
-            
-            if not self.Config("MAIL.ENGINE"):
-                self.ConfigSet("MAIL.ENGINE", "SMTP")
-            
-            # Espandi configurazione
-            self.ConfigUpdate()
-            sResult = self.Start_Expand(self.dictConfig, self.dictConfig)
-            
-            if sResult:
-                self.jLog.Log1(sResult)
-            
-            return sResult
-            
-        except Exception as e:
-            sResult = f"{sProc}: Errore - {str(e)}"
-            self.jLog.Log1(sResult)
-            return sResult
-    
-    def Start_ReadDat(self) -> str:
-        """
-        Legge i file CSV di configurazione.
-        
-        Returns:
-            str: Stringa vuota se successo, stringa di errore altrimenti
-        """
+        return sResult
+
+    def Start_ReadDat(self):
         sProc = "Start_ReadDat"
         sResult = ""
-        
-        print(f"Esecuzione ntjobsos {sProc}")
+        print(f"Esecuzione aiJobsOS {sProc}")
         
         try:
-            sRootPath = self.sSys_PathRoot
+            # Mappatura file -> array campi -> dizionario destinazione
+            files_config = [
+                ("ntjobs_actions.csv", self.JOBS_DAT_ACTIONS, "JOBS_TAB_ACTIONS"),
+                ("ntjobs_groups.csv", self.JOBS_DAT_GROUPS, "JOBS_TAB_GROUPS"),
+                ("ntjobs_users.csv", self.JOBS_DAT_USERS, "JOBS_TAB_USERS")
+            ]
             
-            # Leggi file delle azioni
-            sActionsFile = os.path.join(sRootPath, "ntjobs_actions.csv")
-            sResult, self.JOBS_TAB_ACTIONS = aiSys.read_csv_to_dict(sActionsFile, ';')
+            for sFileName, avHeader, sDictName in files_config:
+                sFileCSV = aiSys.PathMake(self.sSys_PathRoot, sFileName.split('.')[0], "csv")
+                
+                sResult, dictTemp = aiSys.read_csv_to_dict(sFileCSV, avHeader)
+                if sResult != "":
+                    self.Log1(sResult)
+                    return f"{sProc}: {sResult}"
+                
+                # Assegnazione al dizionario corrispondente
+                setattr(self, sDictName, dictTemp)
             
-            if sResult:
-                return f"Errore lettura ntjobs_actions.csv: {sResult}"
+            # Inizializzazione array di supporto
+            self.asActions = list(self.JOBS_TAB_ACTIONS.keys()) if self.JOBS_TAB_ACTIONS else []
+            self.asGroups = list(self.JOBS_TAB_GROUPS.keys()) if self.JOBS_TAB_GROUPS else []
+            self.asUsers = list(self.JOBS_TAB_USERS.keys()) if self.JOBS_TAB_USERS else []
             
-            # Verifica campi obbligatori per azioni
-            for action_id, action_data in self.JOBS_TAB_ACTIONS.items():
-                for field in self.JOBS_DAT_ACTIONS:
-                    if field not in action_data:
-                        return f"Campo {field} mancante in azione {action_id}"
-            
-            # Leggi file dei gruppi
-            sGroupsFile = os.path.join(sRootPath, "ntjobs_groups.csv")
-            sResult, self.JOBS_TAB_GROUPS = aiSys.read_csv_to_dict(sGroupsFile, ';')
-            
-            if sResult:
-                return f"Errore lettura ntjobs_groups.csv: {sResult}"
-            
-            # Verifica campi obbligatori per gruppi
-            for group_id, group_data in self.JOBS_TAB_GROUPS.items():
-                for field in self.JOBS_DAT_GROUPS:
-                    if field not in group_data:
-                        return f"Campo {field} mancante in gruppo {group_id}"
-            
-            # Leggi file degli utenti
-            sUsersFile = os.path.join(sRootPath, "ntjobs_users.csv")
-            sResult, self.JOBS_TAB_USERS = aiSys.read_csv_to_dict(sUsersFile, ';')
-            
-            if sResult:
-                return f"Errore lettura ntjobs_users.csv: {sResult}"
-            
-            # Verifica campi obbligatori per utenti
-            for user_id, user_data in self.JOBS_TAB_USERS.items():
-                for field in self.JOBS_DAT_USERS:
-                    if field not in user_data:
-                        return f"Campo {field} mancante in utente {user_id}"
-            
-            # Espandi tutte le tabelle
-            for dictData in [self.JOBS_TAB_ACTIONS, self.JOBS_TAB_GROUPS, self.JOBS_TAB_USERS]:
-                sResult = self.Start_Expand(dictData, self.dictConfig)
-                if sResult:
-                    return sResult
-            
-            # Estrai lista utenti e azioni
-            self.asUsers = list(self.JOBS_TAB_USERS.keys())
-            self.asActions = list(self.JOBS_TAB_ACTIONS.keys())
-            
-            self.jLog.Log1(f"Letti {len(self.asUsers)} utenti e {len(self.asActions)} azioni")
-            return sResult
+            print("Caricati DAT")
             
         except Exception as e:
-            sResult = f"{sProc}: Errore - {str(e)}"
-            self.jLog.Log1(sResult)
-            return sResult
-    
-    def Start_ReadPaths(self) -> str:
-        """
-        Inizializza i paths da monitorare.
+            sResult = f"Eccezione in {sProc}: {str(e)}"
+            self.Log1(sResult)
         
-        Returns:
-            str: Stringa vuota se successo, stringa di errore altrimenti
-        """
+        return sResult
+
+    def Start_ReadPaths(self):
         sProc = "Start_ReadPaths"
         sResult = ""
-        
-        print(f"Esecuzione ntjobsos {sProc}")
+        print(f"Esecuzione aiJobsOS {sProc}")
         
         try:
-            self.dictPaths = {}
+            dictTemp = {}
             
-            # Raccogli paths da tutti gli utenti
-            for sUser, user_data in self.JOBS_TAB_USERS.items():
-                sUserPaths = user_data.get("USER_PATHS", "")
-                if sUserPaths:
-                    # Converti in array e pulisci
-                    asPaths = aiSys.StringToArray(sUserPaths, ',')
-                    for sPath in asPaths:
-                        sPathClean = sPath.strip()
-                        if sPathClean:
-                            self.dictPaths[sPathClean] = sUser
+            if self.JOBS_TAB_USERS:
+                for sUser, dictUser in self.JOBS_TAB_USERS.items():
+                    sPaths = dictUser.get("USER_PATHS", "")
+                    if sPaths:
+                        asPaths = aiSys.StringToArray(sPaths)
+                        for sPathSingle in asPaths:
+                            sPathSingle = aiSys.Expand(sPathSingle, self.dictConfig)
+                            sPathSingle = sPathSingle.strip()
+                            if sPathSingle:
+                                dictTemp[sPathSingle] = sUser
             
-            # Espandi i paths
-            dictPathsExpanded = {}
-            for sPath, sUser in self.dictPaths.items():
-                sPathExpanded = aiSys.Expand(sPath, self.dictConfig)
-                dictPathsExpanded[sPathExpanded] = sUser
-            
-            self.dictPaths = dictPathsExpanded
+            self.dictPaths = dictTemp.copy()
             self.asPaths = list(self.dictPaths.keys())
             
             # Verifica esistenza paths
-            missing_paths = []
             for sPath in self.asPaths:
-                if not os.path.exists(sPath):
-                    missing_paths.append(sPath)
+                if not aiSys.isValidPath(sPath):
+                    sResult += f"Non trovato Path {sPath}. "
             
-            if missing_paths:
-                sResult = f"Paths non trovati: {', '.join(missing_paths)}"
-                self.jLog.Log1(sResult)
+            if sResult != "":
+                self.Log1(sResult)
             
-            self.jLog.Log1(f"Inizializzati {len(self.asPaths)} paths da monitorare")
-            return sResult
+            print("Caricati PATHS")
             
         except Exception as e:
-            sResult = f"{sProc}: Errore - {str(e)}"
-            self.jLog.Log1(sResult)
-            return sResult
-    
-    def Start_Mail(self) -> str:
-        """
-        Inizializza il sistema di email.
+            sResult = f"Eccezione in {sProc}: {str(e)}"
+            self.Log1(sResult)
         
-        Returns:
-            str: Stringa vuota se successo, stringa di errore altrimenti
-        """
-        sProc = "Start_Mail"
-        sResult = ""
-        
-        print(f"Esecuzione ntjobsos {sProc}")
-        
-        try:
-            sEngine = self.Config("MAIL.ENGINE")
-            self.sMailAdmin = self.Config("ADMIN.EMAIL")
-            
-            if sEngine.upper() == "SMTP":
-                # Inizializza SMTP
-                self.jMail = NC_MailSimple()
-                
-                # Ottieni parametri SMTP
-                sSmtp_User = self.Config("SMTP.USER")
-                sSmtp_Pwd = self.Config("SMTP.PASSWORD")
-                sSmtp_Host = self.Config("SMTP.SERVER")
-                nSmtp_Port = aiSys.StringToNum(self.Config("SMTP.PORT"))
-                bSmtp_SSL = aiSys.StringBoolean(self.Config("SMTP.SSL"))
-                sSmtp_From = self.Config("SMTP.FROM")
-                
-                # Verifica parametri obbligatori
-                required_params = [
-                    ("SMTP.USER", sSmtp_User),
-                    ("SMTP.PASSWORD", sSmtp_Pwd),
-                    ("SMTP.SERVER", sSmtp_Host),
-                    ("SMTP.PORT", nSmtp_Port),
-                    ("SMTP.FROM", sSmtp_From)
-                ]
-                
-                missing = [name for name, value in required_params if not value]
-                if missing:
-                    sResult = f"Parametri mail SMTP mancanti: {', '.join(missing)}"
-                    self.jLog.Log1(sResult)
-                    return sResult
-                
-                # Connetti al server SMTP
-                sResult = self.jMail.Start(sSmtp_User, sSmtp_Pwd, sSmtp_Host, 
-                                         nSmtp_Port, 30, bSmtp_SSL, True)
-                
-                if not sResult:
-                    self.sMailEngine = "SMTP"
-                    self.jLog.Log1("Mail engine SMTP inizializzato")
-                else:
-                    self.jLog.Log1(f"Errore inizializzazione SMTP: {sResult}")
-                    
-            elif sEngine.upper() == "OLK":
-                # Configura Outlook
-                self.sSys_PathOlk = self.Config("MAIL.PATH")
-                if not self.sSys_PathOlk:
-                    sResult = "MAIL.PATH non configurato per OLK"
-                    self.jLog.Log1(sResult)
-                    return sResult
-                
-                self.sSys_Olk = os.path.join(self.sSys_PathOlk, "ntj_sendmail_olk.cmd")
-                
-                if not os.path.exists(self.sSys_Olk):
-                    sResult = f"Script OLK non trovato: {self.sSys_Olk}"
-                    self.jLog.Log1(sResult)
-                    return sResult
-                
-                self.sMailEngine = "OLK"
-                self.jLog.Log1("Mail engine OLK configurato")
-                
-            else:
-                sResult = f"Mail engine non supportato: {sEngine}"
-                self.jLog.Log1(sResult)
-                return sResult
-            
-            return sResult
-            
-        except Exception as e:
-            sResult = f"{sProc}: Errore - {str(e)}"
-            self.jLog.Log1(sResult)
-            return sResult
-    
-    def Start_Expand(self, dictExpand: Dict[str, Any], dictParams: Dict[str, str]) -> str:
-        """
-        Espande variabili in un dizionario.
-        
-        Args:
-            dictExpand: Dizionario da espandere
-            dictParams: Dizionario parametri per espansione
-            
-        Returns:
-            str: Stringa vuota se successo, stringa di errore altrimenti
-        """
+        return sResult
+
+    def Start_Expand(self):
         sProc = "Start_Expand"
         sResult = ""
+        print(f"Esecuzione aiJobsOS {sProc}")
         
         try:
-            # Verifica se l'espansione è abilitata
             if not aiSys.StringBoolean(self.Config("EXPAND")):
                 return sResult
             
-            # Usa ExpandDict di aiSys
-            expanded = aiSys.ExpandDict(dictExpand, dictParams)
+            # Espansione dictConfig
+            sResult = aiSys.ExpandDict(self.dictConfig, self.dictConfig)
+            if sResult != "":
+                return f"{sProc}: {sResult}"
             
-            # Aggiorna il dizionario originale
-            dictExpand.clear()
-            dictExpand.update(expanded)
-            
-            return sResult
+            # Espansione tabelle
+            tables = [self.JOBS_TAB_USERS, self.JOBS_TAB_GROUPS, self.JOBS_TAB_ACTIONS]
+            for dictTable in tables:
+                if dictTable:
+                    sResult = aiSys.ExpandDict(dictTable, self.dictConfig)
+                    if sResult != "":
+                        return f"{sProc}: {sResult}"
             
         except Exception as e:
-            sResult = f"{sProc}: Errore - {str(e)}"
-            self.jLog.Log1(sResult)
-            return sResult
-    
-    def Start_Verify(self) -> str:
-        """
-        Verifica la congruità delle configurazioni.
+            sResult = f"Eccezione in {sProc}: {str(e)}"
         
-        Returns:
-            str: Stringa vuota se successo, stringa di errore altrimenti
-        """
+        return sResult
+
+    def Start_Verify(self):
         sProc = "Start_Verify"
         sResult = ""
-        errors = []
-        
-        print(f"Esecuzione ntjobsos {sProc}")
+        print(f"Esecuzione aiJobsOS {sProc}")
         
         try:
-            # Verifica CONFIG
-            admin_email = self.Config("ADMIN.EMAIL")
-            if not aiSys.isEmail(admin_email):
-                errors.append("ADMIN.EMAIL non valida")
+            # Verifica JOBS_TAB_CONFIG
+            if self.JOBS_TAB_CONFIG:
+                # ADMIN.EMAIL
+                sValue = self.JOBS_TAB_CONFIG.get("ADMIN.EMAIL", "")
+                if sValue and not aiSys.isEmail(sValue):
+                    sResult += "ADMIN.MAIL non corretta. "
+                
+                # TYPE
+                sValue = self.JOBS_TAB_CONFIG.get("TYPE", "")
+                if sValue != "NTJOBS.CONFIG.1":
+                    sResult += "TYPE non corretta. "
+                
+                # INBOX
+                sValue = self.JOBS_TAB_CONFIG.get("INBOX", "")
+                if sValue and not aiSys.isValidPath(sValue):
+                    sResult += "INBOX non corretta. "
+                
+                # LOG
+                sValue = self.JOBS_TAB_CONFIG.get("LOG", "")
+                if sValue:
+                    sPath = os.path.dirname(sValue)
+                    if not aiSys.isValidPath(sPath):
+                        sResult += "LOG non corretta. "
+                
+                # ARCHIVE
+                sValue = self.JOBS_TAB_CONFIG.get("ARCHIVE", "")
+                if sValue and not aiSys.isValidPath(sValue):
+                    sResult += "ARCHIVE non corretta. "
+                
+                # MAIL.ENGINE
+                sValue = self.JOBS_TAB_CONFIG.get("MAIL.ENGINE", "")
+                if sValue not in ["OLK", "SMTP"]:
+                    sResult += "MAIL.ENGINE non corretta. "
+                
+                # MAIL.PATH
+                sValue = self.JOBS_TAB_CONFIG.get("MAIL.PATH", "")
+                if sValue and not aiSys.isValidPath(sValue):
+                    sResult += "MAIL.PATH non corretta. "
+                
+                # Verifica SMTP se necessario
+                if self.JOBS_TAB_CONFIG.get("MAIL.ENGINE") == "SMTP":
+                    for sKey in self.JOBS_DAT_CONFIG_SMTP:
+                        sValue = self.JOBS_TAB_CONFIG.get(sKey, "")
+                        if sValue == "":
+                            sResult += f"Config non presente {sKey}. "
+                    
+                    # SMTP.FROM
+                    sValue = self.JOBS_TAB_CONFIG.get("SMTP.FROM", "")
+                    if sValue and not aiSys.isEmail(sValue):
+                        sResult += "SMTP.FROM non è email. "
+                    
+                    # SMTP.SSL
+                    sValue = self.JOBS_TAB_CONFIG.get("SMTP.SSL", "")
+                    if sValue and not aiSys.isBool(sValue):
+                        sResult += "SMTP.SSL non corretto. "
+                    
+                    # SMTP.TLS
+                    sValue = self.JOBS_TAB_CONFIG.get("SMTP.TLS", "")
+                    if sValue and not aiSys.isBool(sValue):
+                        sResult += "SMTP.TLS non corretto. "
             
-            config_type = self.Config("TYPE")
-            if config_type != "NTJOBS.CONFIG.1":
-                errors.append(f"TYPE deve essere 'NTJOBS.CONFIG.1', trovato '{config_type}'")
+            # Verifica JOBS_TAB_USERS
+            if self.JOBS_TAB_USERS:
+                for sUser, dictValue in self.JOBS_TAB_USERS.items():
+                    # USER_ID
+                    sValue = dictValue.get("USER_ID", "")
+                    if sValue and not sValue.isalnum():
+                        sResult += f"Errore verifica USER_ID, per user {sUser}. "
+                    
+                    # USER_PASSWORD
+                    sValue = dictValue.get("USER_PASSWORD", "")
+                    if sValue:
+                        import re
+                        if not re.match(r'^[a-zA-Z0-9_\.!#]+$', sValue):
+                            sResult += f"Errore verifica USER_PASSWORD, per user {sUser}. "
+                    
+                    # USER_NAME
+                    sValue = dictValue.get("USER_NAME", "")
+                    if sValue and not sValue.replace(" ", "").isalpha():
+                        sResult += f"Errore verifica USER_NAME, per user {sUser}. "
+                    
+                    # USER_GROUPS
+                    sValue = dictValue.get("USER_GROUPS", "")
+                    if sValue:
+                        groups = aiSys.StringToArray(sValue)
+                        for group in groups:
+                            if group not in self.asGroups:
+                                sResult += f"Errore verifica USER_GROUPS, per user {sUser}. "
+                    
+                    # USER_PATHS
+                    sValue = dictValue.get("USER_PATHS", "")
+                    if sValue:
+                        paths = aiSys.StringToArray(sValue)
+                        for path in paths:
+                            if not aiSys.isValidPath(path):
+                                sResult += f"Errore verifica USER_PATHS, per user {sUser}. "
+                    
+                    # USER_MAIL
+                    sValue = dictValue.get("USER_MAIL", "")
+                    if sValue and not aiSys.isEmail(sValue):
+                        sResult += f"Errore verifica USER_MAIL, per user {sUser}. "
             
-            for path_key in ["SYSROOT", "INBOX", "ARCHIVE"]:
-                path = self.Config(path_key)
-                if not aiSys.isValidPath(path):
-                    errors.append(f"{path_key} non valido: {path}")
+            # Verifica JOBS_TAB_GROUPS
+            if self.JOBS_TAB_GROUPS:
+                for sGroup, dictValue in self.JOBS_TAB_GROUPS.items():
+                    # GROUP_ID
+                    sValue = dictValue.get("GROUP_ID", "")
+                    if sValue and not sValue.isalnum():
+                        sResult += f"Errore verifica GROUP_ID, per Gruppo {sGroup}. "
+                    
+                    # GROUP_NAME
+                    sValue = dictValue.get("GROUP_NAME", "")
+                    if sValue and not sValue.replace(" ", "").isalpha():
+                        sResult += f"Errore verifica GROUP_NAME, per Gruppo {sGroup}. "
             
-            mail_engine = self.Config("MAIL.ENGINE")
-            if mail_engine not in ["OLK", "SMTP"]:
-                errors.append(f"MAIL.ENGINE deve essere 'OLK' o 'SMTP', trovato '{mail_engine}'")
+            # Verifica JOBS_TAB_ACTIONS
+            if self.JOBS_TAB_ACTIONS:
+                for sAction, dictValue in self.JOBS_TAB_ACTIONS.items():
+                    # ACT_ID
+                    sValue = dictValue.get("ACT_ID", "")
+                    if sValue and not sValue.isalnum():
+                        sResult += f"Errore verifica ACT_ID, per action {sAction}. "
+                    
+                    # ACT_NAME
+                    sValue = dictValue.get("ACT_NAME", "")
+                    if sValue and not sValue.replace(" ", "").isalpha():
+                        sResult += f"Errore verifica ACT_NAME, per action {sAction}. "
+                    
+                    # ACT_GROUPS
+                    sValue = dictValue.get("ACT_GROUPS", "")
+                    if sValue:
+                        groups = aiSys.StringToArray(sValue)
+                        for group in groups:
+                            if group not in self.asGroups:
+                                sResult += f"Errore verifica ACT_GROUPS, per action {sAction}. "
+                    
+                    # ACT_ENABLED
+                    sValue = dictValue.get("ACT_ENABLED", "")
+                    if sValue and not aiSys.isBool(sValue):
+                        sResult += f"Errore verifica ACT_ENABLED, per action {sAction}. "
+                    
+                    # ACT_PATH
+                    sValue = dictValue.get("ACT_PATH", "")
+                    if sValue and not aiSys.isValidPath(sValue):
+                        sResult += f"Errore verifica ACT_PATH, per action {sAction}. "
             
-            # Verifica USERS
-            for user_id, user_data in self.JOBS_TAB_USERS.items():
-                if not aiSys.isAlphanumeric(user_id):
-                    errors.append(f"USER_ID non alfanumerico: {user_id}")
-                
-                password = user_data.get("USER_PASSWORD", "")
-                if not aiSys.isValidPassword(password):
-                    errors.append(f"USER_PASSWORD non valida per utente {user_id}")
-                
-                user_name = user_data.get("USER_NAME", "")
-                if user_name and not aiSys.isLettersOnly(user_name, bAllowSpaces=True):
-                    errors.append(f"USER_NAME contiene caratteri non validi: {user_name}")
-                
-                groups = user_data.get("USER_GROUPS", "")
-                if groups:
-                    group_list = aiSys.StringToArray(groups, ',')
-                    for group in group_list:
-                        if not aiSys.isAlphanumeric(group, "._"):
-                            errors.append(f"USER_GROUPS contiene gruppo non valido per utente {user_id}: {group}")
-                
-                user_mail = user_data.get("USER_MAIL", "")
-                if not aiSys.isEmail(user_mail):
-                    errors.append(f"USER_MAIL non valida per utente {user_id}: {user_mail}")
-                
-                # Verifica paths
-                user_paths = user_data.get("USER_PATHS", "")
-                if user_paths:
-                    path_list = aiSys.StringToArray(user_paths, ',')
-                    for path in path_list:
-                        expanded_path = aiSys.Expand(path, self.dictConfig)
-                        if not aiSys.isValidPath(expanded_path):
-                            errors.append(f"USER_PATHS contiene path non valido per utente {user_id}: {path}")
-            
-            # Verifica GROUPS
-            for group_id, group_data in self.JOBS_TAB_GROUPS.items():
-                if not aiSys.isAlphanumeric(group_id):
-                    errors.append(f"GROUP_ID non alfanumerico: {group_id}")
-                
-                group_name = group_data.get("GROUP_NAME", "")
-                if group_name and not aiSys.isLettersOnly(group_name, bAllowSpaces=True):
-                    errors.append(f"GROUP_NAME contiene caratteri non validi: {group_name}")
-            
-            # Verifica ACTIONS
-            for action_id, action_data in self.JOBS_TAB_ACTIONS.items():
-                if not aiSys.isAlphanumeric(action_id):
-                    errors.append(f"ACT_ID non alfanumerico: {action_id}")
-                
-                action_name = action_data.get("ACT_NAME", "")
-                if action_name and not aiSys.isLettersOnly(action_name, bAllowSpaces=True):
-                    errors.append(f"ACT_NAME contiene caratteri non validi: {action_name}")
-                
-                groups = action_data.get("ACT_GROUPS", "")
-                if groups:
-                    group_list = aiSys.StringToArray(groups, ',')
-                    for group in group_list:
-                        if not aiSys.isAlphanumeric(group, "._"):
-                            errors.append(f"ACT_GROUPS contiene gruppo non valido per azione {action_id}: {group}")
-                
-                enabled = action_data.get("ACT_ENABLED", "")
-                if not aiSys.isBool(enabled):
-                    errors.append(f"ACT_ENABLED non booleano per azione {action_id}: {enabled}")
-                
-                action_path = action_data.get("ACT_PATH", "")
-                if action_path:
-                    expanded_path = aiSys.Expand(action_path, self.dictConfig)
-                    if not aiSys.isValidPath(expanded_path):
-                        errors.append(f"ACT_PATH non valido per azione {action_id}: {action_path}")
-            
-            # Verifica mail admin
-            if self.sMailAdmin and not aiSys.isEmail(self.sMailAdmin):
-                errors.append(f"Mail amministratore non valida: {self.sMailAdmin}")
-            
-            if errors:
-                sResult = "Errori di verifica: " + "; ".join(errors)
-                self.jLog.Log1(sResult)
-            
-            return sResult
+            if sResult != "":
+                self.Log1(sResult)
             
         except Exception as e:
-            sResult = f"{sProc}: Errore - {str(e)}"
-            self.jLog.Log1(sResult)
-            return sResult
-    
-    def Start_End(self) -> None:
-        """
-        Gestisce la fine di un'avvio fallito.
-        """
+            sResult = f"Eccezione in {sProc}: {str(e)}"
+            self.Log1(sResult)
+        
+        return sResult
+
+    def Start_Mail(self):
+        sProc = "Start_Mail"
+        sResult = ""
+        print(f"Esecuzione aiJobsOS {sProc}")
+        
+        try:
+            sEngine = self.Config("MAIL.ENGINE")
+            
+            if sEngine == "SMTP":
+                # Import dinamico di ncMailSimple
+                try:
+                    from ncMailSimple import ncMailSimple
+                    self.jMail = ncMailSimple()
+                except ImportError as e:
+                    sResult = f"Impossibile importare ncMailSimple: {str(e)}"
+                    self.Log1(sResult)
+                    return f"{sProc}: {sResult}"
+                
+                if sResult == "":
+                    self.sMailAdmin = self.Config("ADMIN.EMAIL")
+                    sSmtp_User = self.Config("SMTP.USER")
+                    sSmtp_Pwd = self.Config("SMTP.PASSWORD")
+                    sSmtp_Port = self.Config("SMTP.PORT")
+                    sSmtp_Host = self.Config("SMTP.SERVER")
+                    bSmtp_SSL = aiSys.StringBoolean(self.Config("SMTP.SSL"))
+                    sSmtp_From = self.Config("SMTP.FROM")
+                    
+                    # Verifica campi obbligatori
+                    required = [sSmtp_User, sSmtp_Pwd, sSmtp_Port, sSmtp_Host, sSmtp_From]
+                    if any(field == "" for field in required):
+                        sResult = "Settings mail non presenti in config"
+                    
+                    if sResult == "":
+                        nSmtp_Port = aiSys.StringToNum(sSmtp_Port)
+                        sResult = self.jMail.Start(sSmtp_User, sSmtp_Pwd, sSmtp_Host, 
+                                                   nSmtp_Port, 30, bSmtp_SSL, True)
+                        
+                        if sResult == "":
+                            self.sMailEngine = "SMTP"
+            
+            elif sEngine == "OLK":
+                self.sSys_PathOlk = self.Config("MAIL.PATH")
+                self.sSys_Olk = aiSys.PathMake(self.sSys_PathOlk, "ntj_sendmail_olk", "cmd")
+                
+                if not os.path.exists(self.sSys_Olk):
+                    sResult = "OLK MAIL NON PRESENTE"
+                else:
+                    self.sMailEngine = "OLK"
+            
+            else:
+                sResult = f"Mail engine non riconosciuto: {sEngine}"
+            
+            if sResult != "":
+                self.Log1(sResult)
+            
+        except Exception as e:
+            sResult = f"Eccezione in {sProc}: {str(e)}"
+            self.Log1(sResult)
+        
+        return sResult
+
+    def Start_End(self):
         sProc = "Start_End"
+        sResult = ""
         
         try:
-            sResult = f"Avvio ntJobsOS fallito: {self.tsStart}"
-            self.Return(sResult)
-            self.jLog.Log1(sResult)
+            sResult = self.JobsEnd()
+            if sResult != "":
+                return f"{sProc}: {sResult}"
+            
+            # Creazione file jobs.end di errore
+            sFileEnd = aiSys.PathMake(self.sSys_PathRoot, "jobs", "end")
+            dictError = {
+                "CONFIG": {
+                    "TYPE": "NTJOBS.CONFIG.1",
+                    "ERROR": "Startup failed"
+                }
+            }
+            sResult = aiSys.save_dict_to_ini(dictError, sFileEnd)
             
         except Exception as e:
-            print(f"{sProc}: Errore - {str(e)}")
-    
-    # ========================================================================
-    # METODI PRINCIPALI DI ESECUZIONE
-    # ========================================================================
-    
-    def Run(self) -> str:
-        """
-        Ciclo principale di esecuzione ntJobsOS.
+            sResult = f"Eccezione in {sProc}: {str(e)}"
         
-        Returns:
-            str: Stringa vuota se successo, stringa di errore altrimenti
-        """
+        return sResult
+
+    # =========================================================================
+    # METODI PRINCIPALI DI ESECUZIONE
+    # =========================================================================
+    def Run(self):
         sProc = "Run"
         sResult = ""
+        print(f"Esecuzione aiJobsOS {sProc}")
         
         try:
             while not self.bExitOS:
-                # Esegui le fasi principali
-                sResult = self.Search()
-                if sResult:
-                    self.jLog.Log0(sResult, "Errore in Search")
+                # Sequenza di operazioni principali
+                methods = [self.Search, self.Get, self.Archive]
+                for method in methods:
+                    sResult = method()
+                    if sResult != "":
+                        self.Log1(sResult)
+                        self.bExitOS = True
+                        break
                 
-                sResult = self.Get()
-                if sResult:
-                    self.jLog.Log0(sResult, "Errore in Get")
+                if not self.bExitOS:
+                    sResult = self.CycleEnd()
+                    if sResult != "":
+                        self.Log1(sResult)
                 
-                sResult = self.Archive()
-                if sResult:
-                    self.jLog.Log0(sResult, "Errore in Archive")
-                
-                # Fine ciclo
-                sResult = self.CycleEnd()
-                if sResult:
-                    self.bExitOS = True
-            
-            return sResult
-            
         except Exception as e:
-            sResult = f"{sProc}: Errore - {str(e)}"
-            self.jLog.Log0(sResult, "Errore in Run")
-            return sResult
-    
-    def Search(self) -> str:
-        """
-        Cerca file jobs.ini nei paths configurati.
+            sResult = f"Eccezione in {sProc}: {str(e)}"
+            self.Log1(sResult)
         
-        Returns:
-            str: Stringa vuota se successo, stringa di errore altrimenti
-        """
+        return sResult
+
+    def Search(self):
         sProc = "Search"
         sResult = ""
-        
-        print(f"Esecuzione ntjobsos {sProc}")
+        print(f"Esecuzione aiJobsOS {sProc}")
         
         try:
             for sPath in self.asPaths:
-                sJobsFile = os.path.join(sPath, "jobs.ini")
-                
-                if os.path.exists(sJobsFile):
-                    # Sposta il file in inbox
+                sFileJobs = aiSys.PathMake(sPath, "jobs", "ini")
+                if os.path.exists(sFileJobs):
                     sResultTemp = self.Move(sPath)
-                    
-                    if sResultTemp:
+                    if sResultTemp != "":
                         sResult += sResultTemp + ", "
-                        self.jLog.Log0(sResultTemp, f"Errore spostamento jobs.ini da {sPath}")
                     else:
-                        self.jLog.Log1(f"Trovato e spostato jobs.ini da {sPath}")
+                        self.Log(sResultTemp, f"Trovato jobs.ini in {sPath}")
             
-            return sResult
+            if sResult.endswith(", "):
+                sResult = sResult[:-2]
             
         except Exception as e:
-            sResult = f"{sProc}: Errore - {str(e)}"
-            self.jLog.Log0(sResult, "Errore in Search")
-            return sResult
-    
-    def Move(self, sPath: str) -> str:
-        """
-        Sposta un file jobs.ini e allegati in inbox.
+            sResult = f"Eccezione in {sProc}: {str(e)}"
         
-        Args:
-            sPath: Path sorgente
-            
-        Returns:
-            str: Stringa vuota se successo, stringa di errore altrimenti
-        """
+        return sResult
+
+    def Move(self, sPath):
         sProc = "Move"
         sResult = ""
         
         try:
-            sFileJobs = os.path.join(sPath, "jobs.ini")
+            sFileJobs = aiSys.PathMake(sPath, "jobs", "ini")
+            sResult, dictTemp = aiSys.read_ini_to_dict(sFileJobs)
             
-            # Leggi file jobs.ini
-            if not os.path.exists(sFileJobs):
-                sResult = f"File jobs.ini non trovato: {sFileJobs}"
+            if sResult != "":
                 return self.MoveError(sResult, sPath)
             
-            # Leggi con configparser
-            temp_ini = configparser.ConfigParser()
-            temp_ini.optionxform = str
-            
-            try:
-                temp_ini.read(sFileJobs, encoding='utf-8')
-            except Exception as e:
-                sResult = f"Errore lettura jobs.ini: {str(e)}"
+            if "CONFIG" not in dictTemp:
+                sResult = f"File senza CONFIG {sFileJobs}"
                 return self.MoveError(sResult, sPath)
             
-            # Verifica sezione CONFIG
-            if "CONFIG" not in temp_ini.sections():
-                sResult = "File jobs.ini senza sezione CONFIG"
-                return self.MoveError(sResult, sPath)
-            
-            # Crea cartella inbox
-            sTimestamp = aiSys.Timestamp()
-            sPathInbox = os.path.join(self.sSys_PathInbox, f"job_{sTimestamp}")
-            
+            # Creazione cartella inbox
+            sPathInbox = aiSys.PathMake(self.sSys_PathInbox, f"job_{aiSys.Timestamp()}", "")
             try:
                 os.makedirs(sPathInbox, exist_ok=True)
             except Exception as e:
-                sResult = f"Errore creazione cartella inbox: {str(e)}"
+                sResult = f"Errore creazione path inbox {sPathInbox}: {str(e)}"
                 return self.MoveError(sResult, sPath)
             
-            # Sposta jobs.ini
-            sDestFile = os.path.join(sPathInbox, "jobs.ini")
+            sLogMove = ""
+            
+            # Spostamento jobs.ini
+            sDestJobs = aiSys.PathMake(sPathInbox, "jobs", "ini")
             try:
-                shutil.move(sFileJobs, sDestFile)
+                os.rename(sFileJobs, sDestJobs)
+                sLogMove = f"Spostato jobs.ini in {sPathInbox}"
             except Exception as e:
-                sResult = f"Errore spostamento jobs.ini: {str(e)}"
+                sResult = f"Non spostabile {sFileJobs}: {str(e)}"
                 return self.MoveError(sResult, sPath)
             
-            # Sposta file allegati
-            for section in temp_ini.sections():
-                for key, value in temp_ini.items(section):
-                    if key.startswith("FILE."):
-                        sSourceFile = os.path.join(sPath, value)
-                        sDestFile = os.path.join(sPathInbox, value)
-                        
-                        if os.path.exists(sSourceFile):
-                            try:
-                                shutil.move(sSourceFile, sDestFile)
-                            except Exception as e:
-                                sResult = f"Errore spostamento file {value}: {str(e)}"
-                                return self.MoveError(sResult, sPath)
+            # Spostamento file associati
+            for sSection in dictTemp.values():
+                if isinstance(sSection, dict):
+                    for sKey, sValue in sSection.items():
+                        if sKey.startswith("FILE."):
+                            sFileMove = sValue
+                            sSrcFile = aiSys.PathMake(sPath, sFileMove, "")
+                            sDestFile = aiSys.PathMake(sPathInbox, sFileMove, "")
+                            
+                            if os.path.exists(sSrcFile):
+                                try:
+                                    os.rename(sSrcFile, sDestFile)
+                                    sLogMove += f" Spostato file {sFileMove}. "
+                                except Exception as e:
+                                    sResult = f"Non spostabile {sFileMove}: {str(e)}"
+                                    break
             
-            return sResult
+            if sResult != "":
+                return self.MoveError(sResult, sPath)
+            
+            if sLogMove:
+                self.Log(sLogMove, "")
             
         except Exception as e:
-            sResult = f"{sProc}: Errore - {str(e)}"
+            sResult = f"Eccezione in {sProc}: {str(e)}"
             return self.MoveError(sResult, sPath)
-    
-    def MoveError(self, sResult: str, sPath: str) -> str:
-        """
-        Gestisce errori durante lo spostamento.
         
-        Args:
-            sResult: Messaggio di errore
-            sPath: Path sorgente
-            
-        Returns:
-            str: Messaggio di errore
-        """
+        return sResult
+
+    def MoveError(self, sResult, sPath):
         sProc = "MoveError"
         
         try:
-            sFileIni = os.path.join(sPath, "jobs.ini")
-            sFileTemp = os.path.join(sPath, "jobs.end")
+            sFileIni = aiSys.PathMake(sPath, "jobs", "ini")
+            sFileTemp = aiSys.PathMake(sPath, "jobs", "end")
             
-            # Notifica utente via mail
-            sUser = self.dictPaths.get(sPath, "")
-            if sUser and sUser in self.JOBS_TAB_USERS:
-                user_mail = self.JOBS_TAB_USERS[sUser].get("USER_MAIL", "")
-                if user_mail:
-                    self.Mail(user_mail, "Errore in esecuzione jobs.ini", sResult, [])
+            # Invio mail all'utente
+            sMailResult = self.MailUser("Errore in esecuzione jobs.ini", sResult)
             
-            # Rinomina file per evitare rielaborazione
+            # Rinominazione file
             if os.path.exists(sFileIni):
                 try:
                     os.rename(sFileIni, sFileTemp)
-                except:
-                    pass
-            
-            self.jLog.Log0(sResult, f"Errore in Move per path {sPath}")
-            return sResult
+                except Exception as e:
+                    sResult = f"Errore rinomina ini in end: {sFileTemp}: {str(e)}"
             
         except Exception as e:
-            return f"{sProc}: Errore - {str(e)}"
-    
-    def Get(self) -> str:
-        """
-        Preleva ed esegue jobs dalla inbox.
+            sResult = f"Eccezione in {sProc}: {str(e)}"
         
-        Returns:
-            str: Stringa vuota se successo, stringa di errore altrimenti
-        """
+        return sResult
+
+    def Get(self):
         sProc = "Get"
         sResult = ""
-        
-        print(f"Esecuzione ntjobsos {sProc}")
+        print(f"Esecuzione aiJobsOS {sProc}")
         
         try:
-            # Scansiona cartelle inbox
             if not os.path.exists(self.sSys_PathInbox):
                 return sResult
             
-            for item in os.listdir(self.sSys_PathInbox):
-                sFolderPath = os.path.join(self.sSys_PathInbox, item)
-                
+            for sFolder in os.listdir(self.sSys_PathInbox):
+                sFolderPath = aiSys.PathMake(self.sSys_PathInbox, sFolder, "")
                 if os.path.isdir(sFolderPath):
-                    sJobsFile = os.path.join(sFolderPath, "jobs.ini")
-                    sJobsEnd = os.path.join(sFolderPath, "jobs.end")
+                    sFileJobs = aiSys.PathMake(sFolderPath, "jobs", "ini")
+                    sFileEnd = aiSys.PathMake(sFolderPath, "jobs", "end")
                     
-                    # Se c'è jobs.ini ma non jobs.end, esegui
-                    if os.path.exists(sJobsFile) and not os.path.exists(sJobsEnd):
+                    if os.path.exists(sFileJobs) and not os.path.exists(sFileEnd):
                         sResult = self.Exec(sFolderPath)
-                        if sResult:
-                            self.jLog.Log0(sResult, f"Errore esecuzione in {sFolderPath}")
-            
-            return sResult
+                        if sResult != "":
+                            self.Log1(sResult)
+                        
+                        # Esegui JobsEnd comunque
+                        sResultEnd = self.JobsEnd()
+                        if sResultEnd != "":
+                            self.Log1(sResultEnd)
+                        
+                        # Solo un job per ciclo
+                        break
             
         except Exception as e:
-            sResult = f"{sProc}: Errore - {str(e)}"
-            self.jLog.Log0(sResult, "Errore in Get")
-            return sResult
-    
-    def Exec(self, sPath: str) -> str:
-        """
-        Esegue un file jobs.ini.
+            sResult = f"Eccezione in {sProc}: {str(e)}"
         
-        Args:
-            sPath: Path della cartella con jobs.ini
-            
-        Returns:
-            str: Stringa vuota se successo, stringa di errore altrimenti
-        """
+        return sResult
+
+    def Exec(self, sPath):
         sProc = "Exec"
         sResult = ""
-        
-        print(f"Esecuzione ntjobsos {sProc}")
+        print(f"Esecuzione aiJobsOS {sProc}")
         
         try:
-            # Inizializza jobs
+            bExitJobs = False
+            
+            # Startup del Jobs
             sResult = self.JobsInit(sPath)
-            if sResult:
-                self.bExitJob = True
-                sResult = f"Errore JobsInit: {sResult}"
-                self.jLog.Log1(sResult)
+            if sResult != "":
+                bExitJobs = True
+                sResult = f"Errore JobsInit: {sResult} {sPath}"
+                self.Log1(sResult)
                 return sResult
             
-            # Esegui tutti i jobs
-            for sKey in self.dictJobs:
-                if sKey == "CONFIG":
+            # Esecuzione singoli jobs
+            for sKey in self.dictJobs.keys():
+                if sKey == "CONFIG" or bExitJobs:
                     continue
                 
                 self.sJob = sKey
-                sResult = self.JobInit()
+                sResult = self.JobExec()
+                if sResult != "":
+                    bExitJobs = True
                 
-                if not sResult:
-                    sResult = self.JobExec()
-                    self.jLog.Log1(sResult)
-                
-                if self.bExitJob:
-                    break
+                sResultEnd = self.JobEnd(sResult, "")
+                if sResultEnd != "":
+                    self.Log1(sResultEnd)
             
-            # Fine elaborazione jobs
+            # Fine elaborazione jobs.ini
             sResult = self.JobsEnd()
             
-            self.jLog.Log1(sResult)
-            return sResult
-            
         except Exception as e:
-            sResult = f"{sProc}: Errore - {str(e)}"
-            self.jLog.Log1(sResult)
-            return sResult
-    
-    def CycleEnd(self) -> str:
-        """
-        Completa un ciclo di elaborazione.
+            sResult = f"Eccezione in {sProc}: {str(e)}"
         
-        Returns:
-            str: Stringa vuota se successo, stringa di errore altrimenti
-        """
+        self.Log1(sResult)
+        return sResult
+
+    def CycleEnd(self):
         sProc = "CycleEnd"
-        sResult = ""
         
-        try:
-            self.nCycleCounter += 1
-            sTimestamp = aiSys.Timestamp()
-            
-            sMsg = f"Ciclo Run: {self.nCycleCounter}, Time: {sTimestamp}, Attesa: {self.nCycleWait}"
-            print(sMsg)
-            self.jLog.Log1(sMsg)
-            
-            # Attesa tra cicli
-            time.sleep(self.nCycleWait)
-            
-            return sResult
-            
-        except Exception as e:
-            sResult = f"{sProc}: Errore - {str(e)}"
-            self.jLog.Log0(sResult, "Errore in CycleEnd")
-            return sResult
-    
-    def Archive(self) -> str:
-        """
-        Archivia job completati.
+        self.nCycleCounter += 1
+        print(f"Ciclo Run: {self.nCycleCounter}, Time: {aiSys.Timestamp()}, Attesa: {self.nCycleWait}")
         
-        Returns:
-            str: Stringa vuota se successo, stringa di errore altrimenti
-        """
-        sProc = "Archive"
-        sResult = ""
-        
-        print(f"Esecuzione ntjobsos {sProc}")
-        
-        try:
-            if not os.path.exists(self.sSys_PathInbox):
-                return sResult
-            
-            if not os.path.exists(self.sSys_PathArchive):
-                os.makedirs(self.sSys_PathArchive, exist_ok=True)
-            
-            for item in os.listdir(self.sSys_PathInbox):
-                sFolderPath = os.path.join(self.sSys_PathInbox, item)
-                
-                if os.path.isdir(sFolderPath):
-                    sJobsIni = os.path.join(sFolderPath, "jobs.ini")
-                    sJobsEnd = os.path.join(sFolderPath, "jobs.end")
-                    
-                    # Se entrambi i file esistono, archivia
-                    if os.path.exists(sJobsIni) and os.path.exists(sJobsEnd):
-                        sDestPath = os.path.join(self.sSys_PathArchive, item)
-                        
-                        try:
-                            if os.path.exists(sDestPath):
-                                # Elimina destinazione esistente
-                                shutil.rmtree(sDestPath)
-                            
-                            shutil.move(sFolderPath, sDestPath)
-                            self.jLog.Log1(f"Archiviato job: {item}")
-                            
-                        except Exception as e:
-                            sErr = f"Errore archiviazione {item}: {str(e)}"
-                            sResult += sErr + ", "
-                            self.jLog.Log0(sErr, "Errore in Archive")
-            
-            if sResult:
-                self.jLog.Log1(sResult)
-            
-            return sResult
-            
-        except Exception as e:
-            sResult = f"{sProc}: Errore - {str(e)}"
-            self.jLog.Log1(sResult)
-            return sResult
-    
-    # ========================================================================
-    # METODI DI GESTIONE JOBS
-    # ========================================================================
-    
-    def JobsInit(self, sJobPath: str) -> str:
-        """
-        Inizializza l'esecuzione di un file jobs.ini.
-        
-        Args:
-            sJobPath: Path della cartella con jobs.ini
-            
-        Returns:
-            str: Stringa vuota se successo, stringa di errore altrimenti
-        """
+        time.sleep(self.nCycleWait)
+        return ""
+
+    # =========================================================================
+    # METODI DI SUPPORTO
+    # =========================================================================
+    def JobsInit(self, sJobPath):
         sProc = "JobsInit"
         sResult = ""
         
-        print(f"Esecuzione ntjobsos {sProc}")
-        
         try:
-            self.sJobsFile = os.path.join(sJobPath, "jobs.ini")
-            self.sJobPath = sJobPath
+            self.sJobsFile = aiSys.PathMake(sJobPath, "jobs", "ini")
             
-            # Leggi file jobs.ini
-            if not os.path.exists(self.sJobsFile):
-                sResult = f"File jobs.ini non trovato: {self.sJobsFile}"
-                self.jLog.Log0(sResult, "Errore JobsInit")
+            sResult, dictTemp = aiSys.read_ini_to_dict(self.sJobsFile)
+            if sResult != "":
+                sResult = f"Errore lettura path {self.sJobsFile}"
                 return sResult
             
-            self.jIni.read(self.sJobsFile, encoding='utf-8')
+            self.dictJobs = dictTemp.copy()
+            self.sJobsPath = sJobPath
+            self.sJobTS = aiSys.Timestamp()
             
-            # Converti in dizionario
-            self.dictJobs = {}
-            for section in self.jIni.sections():
-                self.dictJobs[section.upper()] = {}
-                for key, value in self.jIni.items(section):
-                    self.dictJobs[section.upper()][key.upper()] = value
+            # Aggiornamento configurazione
+            sResult = self.ConfigUpdate()
+            if sResult != "":
+                return sResult
             
-            # Inizializza variabili
-            self.asJobs = [key for key in self.dictJobs.keys() if key != "CONFIG"]
-            self.tsJobs = aiSys.Timestamp()
-            self.bExitJob = False
-            
-            # Aggiorna configurazione e login
-            self.ConfigUpdate()
+            # Login utente
             sResult = self.Login()
+            if sResult != "":
+                return sResult
             
-            self.jLog.Log0(sResult, f"Caricato jobs.ini {sJobPath}")
-            return sResult
+            self.Log0(sResult, f"Caricato jobs.ini {sJobPath}")
             
         except Exception as e:
-            sResult = f"{sProc}: Errore - {str(e)}"
-            self.jLog.Log0(sResult, "Errore JobsInit")
-            return sResult
-    
-    def JobsEnd(self) -> str:
-        """
-        Termina l'esecuzione di un file jobs.ini.
+            sResult = f"Eccezione in {sProc}: {str(e)}"
         
-        Returns:
-            str: Stringa vuota se successo, stringa di errore altrimenti
-        """
+        return sResult
+
+    def JobsEnd(self):
         sProc = "JobsEnd"
         sResult = ""
         
         try:
-            # Invia mail di riepilogo
-            sResult = self.JobsMail()
-            
-            # Rimuovi credenziali da CONFIG
+            # Rimozione USER e PASSWORD dalla sezione CONFIG
             if "CONFIG" in self.dictJobs:
                 config_section = self.dictJobs["CONFIG"]
-                config_section.pop("USER", None)
-                config_section.pop("PASSWORD", None)
+                if "USER" in config_section:
+                    del config_section["USER"]
+                if "PASSWORD" in config_section:
+                    del config_section["PASSWORD"]
             
-            # Salva jobs.end
-            sResultSave = self.Return(sResult)
-            if sResultSave:
-                sResult = sResultSave
+            # Salvataggio jobs.end
+            sFileEnd = self.JobsFileEnd()
+            if sFileEnd:
+                sResult = aiSys.save_dict_to_ini(self.dictJobs, sFileEnd)
+                if sResult != "":
+                    return sResult
             
-            # Logoff e reset
+            # Invio mail
+            sResult = self.JobsMail(sResult)
+            
+            # Logoff
             self.Logoff()
             
-            # Reset variabili job
+            # Reset campi
             self.dictJobs = {}
-            self.sJobPath = ""
+            self.sJobsPath = ""
             self.sJob = ""
             self.asJobs = []
             self.asJobFiles = []
             self.sScript = ""
-            self.dictJob = {}
-            self.sJobsFile = ""
+            self.sJobTS = ""
             
-            return sResult
+            self.Log0(sResult, f"Salvato {sFileEnd}")
             
         except Exception as e:
-            sResult = f"{sProc}: Errore - {str(e)}"
-            self.jLog.Log0(sResult, "Errore JobsEnd")
-            return sResult
-    
-    def JobsMail(self) -> str:
-        """
-        Invia mail di riepilogo per jobs completati.
+            sResult = f"Eccezione in {sProc}: {str(e)}"
         
-        Returns:
-            str: Stringa vuota se successo, stringa di errore altrimenti
-        """
+        return sResult
+
+    def JobsFileEnd(self):
+        if not self.sJobsFile:
+            self.Log1("Errore interno, sJobsFile non avvalorato")
+            return ""
+        
+        base_name = os.path.splitext(os.path.basename(self.sJobsFile))[0]
+        sTemp = aiSys.PathMake(os.path.dirname(self.sJobsFile), base_name, "end")
+        return sTemp
+
+    def JobsMail(self, sResult):
         sProc = "JobsMail"
-        sResult = ""
         
         try:
-            sText = ""
-            if sResult:
-                sText = sResult + "\n\n"
+            sText = sResult if sResult else ""
             
-            # Leggi jobs.end se esiste
-            sJobsEndFile = os.path.join(self.sJobPath, "jobs.end")
-            if os.path.exists(sJobsEndFile):
-                temp_ini = configparser.ConfigParser()
-                temp_ini.optionxform = str
-                temp_ini.read(sJobsEndFile, encoding='utf-8')
-                
-                for section in temp_ini.sections():
-                    sText += f"[{section}]\n"
-                    for key, value in temp_ini.items(section):
-                        sText += f"{key}={value}\n"
-                    sText += "\n"
+            sJobsEnd = aiSys.PathMake(self.sJobsPath, "jobs", "end")
+            if os.path.exists(sJobsEnd):
+                sResultRead, dictTemp = aiSys.read_ini_to_dict(sJobsEnd)
+                if sResultRead == "" and "CONFIG" in dictTemp:
+                    config_section = dictTemp["CONFIG"]
+                    if "USER" in config_section:
+                        del config_section["USER"]
+                    if "PASSWORD" in config_section:
+                        del config_section["PASSWORD"]
+                    
+                    sTemp = self.jDTS.DictToString(dictTemp, "ini.sect")
+                    sText = sResult + "\n\n" + sTemp if sResult else sTemp
             
-            # Invia mail all'utente
-            if self.sUser and self.dictUser.get("USER_MAIL"):
-                sResult = self.MailUser("Completamento jobs.ini", sText)
-            
-            return sResult
+            sResult = self.MailUser("Completamento jobs.ini", sText)
             
         except Exception as e:
-            sResult = f"{sProc}: Errore - {str(e)}"
-            self.jLog.Log0(sResult, "Errore JobsMail")
-            return sResult
-    
-    def JobInit(self) -> str:
-        """
-        Inizializza un job singolo.
+            sResult = f"Eccezione in {sProc}: {str(e)}"
         
-        Returns:
-            str: Stringa vuota se successo, stringa di errore altrimenti
-        """
-        sProc = "JobInit"
+        return sResult
+
+    def JobAction(self):
+        sProc = "JobAction"
         sResult = ""
         
         try:
-            if self.sJob not in self.dictJobs:
-                sResult = f"Job non trovato: {self.sJob}"
-                self.jLog.Log1(sResult)
+            self.sAction = self.dictJob.get("ACTION", "")
+            
+            if self.sAction not in self.asActions:
+                sResult = f"Errore Azione non presente {self.sAction}"
                 return sResult
             
-            # Copia dati job
-            self.dictJob = self.dictJobs[self.sJob].copy()
+            self.dictAction = self.JOBS_TAB_ACTIONS.get(self.sAction, {}).copy()
+            
+            bEnabled = aiSys.StringBoolean(self.dictAction.get("ACT_ENABLED", "False"))
+            if not bEnabled:
+                sResult = f"Action {self.sAction} disabilitata"
+                return sResult
+            
+            # Verifica gruppi
+            sUserGroups = self.dictUser.get("USER_GROUPS", "")
+            sActionGroups = self.dictAction.get("ACT_GROUPS", "")
+            
+            if not aiSys.isGroups(sUserGroups, sActionGroups):
+                sResult = f"Azione non eseguibile per gruppi incompatibili {self.sAction}"
+                return sResult
+            
+            sScript = self.dictAction.get("ACT_SCRIPT", "")
+            if not sScript:
+                sResult = "Script non assegnato"
+                return sResult
+            
+        except Exception as e:
+            sResult = f"Eccezione in {sProc}: {str(e)}"
+        
+        return sResult
+
+    def JobExec(self):
+        sProc = "JobExec"
+        sResult = ""
+        
+        try:
+            self.dictJob = self.dictJobs.get(self.sJob, {}).copy()
             self.tsJob = aiSys.Timestamp()
             
-            # Verifica azione
+            # Interpreta azione
             sResult = self.JobAction()
-            if sResult:
-                sResult = f"Errore interpretazione azione {self.sAction}: {sResult}"
-                self.jLog.Log1(sResult)
+            if sResult != "":
+                sResult = f"Errore interpretazione azione {self.sAction}, Err: {sResult}"
                 return sResult
             
             # Imposta directory corrente
             sCurDir = self.dictAction.get("ACT_PATH", "")
             if sCurDir:
-                if not os.path.exists(sCurDir):
-                    os.makedirs(sCurDir, exist_ok=True)
-                os.chdir(sCurDir)
+                try:
+                    os.chdir(sCurDir)
+                except:
+                    sResult = f"Impossibile cambiare directory in {sCurDir}"
+                    return sResult
             else:
-                os.chdir(self.sJobPath)
+                sCurDir = self.sJobsPath
             
-            # Espandi variabili nel job
-            for key, value in list(self.dictJob.items()):
-                if isinstance(value, str):
-                    self.dictJob[key] = aiSys.Expand(value, self.dictConfig)
+            # Espansione valori nel dictJob
+            for sKey, sValue in list(self.dictJob.items()):
+                if sKey == "ACTION":
+                    self.dictJob["ACTION.ROOT"] = sValue
+                    del self.dictJob[sKey]
+                elif sKey == "COMMAND":
+                    self.dictJob["ACTION"] = sValue
+                    del self.dictJob[sKey]
+                else:
+                    self.dictJob[sKey] = aiSys.Expand(sValue, self.dictConfig)
             
-            # Gestione ACTION/COMMAND
-            if "ACTION" in self.dictJob:
-                self.dictJob["COMMAND"] = self.dictJob["ACTION"]
-                del self.dictJob["ACTION"]
-            
-            # Crea file ntjobsapp.ini
-            sActionIni = os.path.join(os.getcwd(), "ntjobsapp.ini")
-            self.sActionIni = sActionIni
-            
-            # Unisci config e job
-            dictTemp = self.dictConfig.copy()
-            dictTemp.update(self.dictJob)
-            
-            # Salva file ini
-            config_temp = configparser.ConfigParser()
-            config_temp.optionxform = str
-            config_temp["CONFIG"] = dictTemp
-            
-            with open(sActionIni, 'w', encoding='utf-8') as f:
-                config_temp.write(f)
-            
-            self.jLog.Log1(f"Inizializzato job {self.sJob}")
-            return sResult
-            
-        except Exception as e:
-            sResult = f"{sProc}: Errore - {str(e)}"
-            self.jLog.Log1(sResult)
-            return sResult
-    
-    def JobAction(self) -> str:
-        """
-        Verifica e inizializza l'azione del job.
-        
-        Returns:
-            str: Stringa vuota se successo, stringa di errore altrimenti
-        """
-        sProc = "JobAction"
-        sResult = ""
-        
-        try:
-            # Ottieni azione
-            self.sAction = self.dictJob.get("ACTION", "")
-            if not self.sAction:
-                sResult = "ACTION non specificata nel job"
-                return sResult
-            
-            # Verifica esistenza azione
-            if self.sAction not in self.asActions:
-                sResult = f"Azione non presente: {self.sAction}"
-                return sResult
-            
-            # Ottieni dati azione
-            self.dictAction = self.JOBS_TAB_ACTIONS.get(self.sAction, {}).copy()
-            if not self.dictAction:
-                sResult = f"Dati azione non trovati: {self.sAction}"
-                return sResult
-            
-            # Verifica abilitazione
-            sEnabled = self.dictAction.get("ACT_ENABLED", "")
-            if not aiSys.StringBoolean(sEnabled):
-                sResult = f"Azione {self.sAction} disabilitata"
-                return sResult
-            
-            # Verifica gruppi
-            user_groups = aiSys.StringToArray(self.dictUser.get("USER_GROUPS", ""), ',')
-            action_groups = aiSys.StringToArray(self.dictAction.get("ACT_GROUPS", ""), ',')
-            
-            if not aiSys.isGroups(user_groups, action_groups):
-                sResult = f"Azione {self.sAction} non eseguibile per gruppi utente"
-                return sResult
-            
-            # Imposta script e path
-            self.sScript = self.dictAction.get("ACT_SCRIPT", "")
-            self.sActionPath = self.dictAction.get("ACT_PATH", "")
-            
-            return sResult
-            
-        except Exception as e:
-            sResult = f"{sProc}: Errore - {str(e)}"
-            return sResult
-    
-    def JobExec(self) -> str:
-        """
-        Esegue un job singolo.
-        
-        Returns:
-            str: Stringa vuota se successo, stringa di errore altrimenti
-        """
-        sProc = "JobExec"
-        sResult = ""
-        
-        print(f"Esecuzione ntjobsos {sProc}")
-        
-        try:
-            # Azioni interne (sys.*)
+            # Azioni interne che iniziano con "sys."
             if self.sAction.startswith("sys."):
                 sResult = self.JobInternal(self.sAction)
                 return sResult
             
-            # Verifica script
-            if not self.sScript:
-                sResult = "Script non assegnato all'azione"
-                self.jLog.Log(sResult, f"Errore in job {self.sJob}")
-                return sResult
+            # Esecuzione comando esterno
+            self.sScript = self.dictAction.get("ACT_SCRIPT", "")
+            self.sActionPath = self.dictAction.get("ACT_PATH", "")
             
-            # Imposta directory
-            if self.sActionPath:
-                os.chdir(self.sActionPath)
-            else:
-                os.chdir(self.sJobPath)
-            
-            # Crea file ntjobsapp.ini
-            dictTemp = self.dictConfig.copy()
+            # Creazione dizionario combinato
+            dictTemp = {}
+            dictTemp.update(self.dictConfig)
             dictTemp.update(self.dictJob)
             
-            config_temp = configparser.ConfigParser()
-            config_temp.optionxform = str
-            config_temp["CONFIG"] = dictTemp
+            # Salvataggio ntjobsapp.ini
+            sFileIni = aiSys.PathMake(os.getcwd(), "ntjobsapp", "ini")
+            sResult = aiSys.save_dict_to_ini(dictTemp, sFileIni)
+            if sResult != "":
+                return sResult
             
-            sIniFile = os.path.join(os.getcwd(), "ntjobsapp.ini")
-            with open(sIniFile, 'w', encoding='utf-8') as f:
-                config_temp.write(f)
-            
-            # Esegui script
+            # Esecuzione comando
             try:
                 self.pidJob = subprocess.Popen(self.sScript, shell=True)
             except Exception as e:
-                sResult = f"Non eseguibile: {self.sScript}, Errore: {str(e)}"
-                self.jLog.Log(sResult, f"Errore in job {self.sJob}")
+                sResult = f"Non eseguibile in job {self.sJob}, {self.sScript}: {str(e)}"
                 return sResult
             
-            # Attendi completamento
+            # Attesa completamento
             sResult = self.JobExecWait()
-            if sResult:
+            if sResult != "":
                 return sResult
             
-            # Fine esecuzione
-            sResult = self.JobEnd()
+            # Fine job
+            sResult = self.JobEnd(sResult, "")
             
-            self.jLog.Log(sResult, f"Eseguito job {self.sJob}")
-            return sResult
+            self.Log(sResult, f"Eseguito job {self.sJob}")
             
         except Exception as e:
-            sResult = f"{sProc}: Errore - {str(e)}"
-            self.jLog.Log(sResult, f"Errore in job {self.sJob}")
-            return sResult
-    
-    def JobExecWait(self) -> str:
-        """
-        Attende il completamento di un processo esterno.
+            sResult = f"Eccezione in {sProc}: {str(e)}"
         
-        Returns:
-            str: Stringa vuota se successo, stringa di errore altrimenti
-        """
+        # Reset finali
+        self.sJob = ""
+        self.dictJob = None
+        
+        return sResult
+
+    def JobExecWait(self):
         sProc = "JobExecWait"
         sResult = ""
         
         try:
-            # Determina timeout
-            nTimeout = aiSys.StringToNum(self.dictAction.get("ACT_TIMEOUT", "0"))
-            if nTimeout == 0:
-                nTimeout = aiSys.StringToNum(self.Config("TIMEOUT"))
+            sTimeOut = self.dictAction.get("ACT_TIMEOUT", "")
+            if sTimeOut:
+                nTimeout2 = aiSys.StringToNum(sTimeOut)
+            else:
+                nTimeout2 = 0
+            
+            if nTimeout2 == 0:
+                sTimeoutConfig = self.Config("TIMEOUT")
+                nTimeout = aiSys.StringToNum(sTimeoutConfig)
+            else:
+                nTimeout = nTimeout2
             
             if nTimeout < 50:
-                nTimeout = 300  # Default 5 minuti
+                sResult = f"Errore timeout specificato per job {self.sJob}"
+                return sResult
             
-            # Attendi con polling
-            nStartTime = time.time()
-            sEndFile = os.path.join(os.getcwd(), "ntjobsapp.end")
+            start_time = time.time()
+            sFileAppEnd = aiSys.PathMake(os.getcwd(), "ntjobsapp", "end")
             
-            while (time.time() - nStartTime) < nTimeout:
-                # Verifica se processo è terminato
-                if self.pidJob and self.pidJob.poll() is not None:
+            while time.time() - start_time < nTimeout:
+                if os.path.exists(sFileAppEnd):
                     break
                 
-                # Verifica se esiste file .end
-                if os.path.exists(sEndFile):
+                if self.pidJob.poll() is not None:
                     break
                 
-                time.sleep(10)  # Polling ogni 10 secondi
-            
-            # Timeout raggiunto
-            if (time.time() - nStartTime) >= nTimeout:
-                sResult = f"Timeout esecuzione {self.sJob}"
-                
-                # Termina processo forzatamente
-                if self.pidJob and self.pidJob.poll() is None:
-                    try:
-                        self.pidJob.terminate()
-                        self.pidJob.wait(timeout=5)
-                    except:
-                        try:
-                            self.pidJob.kill()
-                        except:
-                            pass
-            
-            return sResult
+                time.sleep(10)
+            else:
+                sResult = f"Timeout esecuzione {self.sJob},{self.sJobsFile}"
+                self.JobCleanup()
             
         except Exception as e:
-            sResult = f"{sProc}: Errore - {str(e)}"
-            return sResult
-    
-    def JobEnd(self, sValue: str = "") -> str:
-        """
-        Termina un job e salva i risultati.
+            sResult = f"Eccezione in {sProc}: {str(e)}"
         
-        Args:
-            sValue: Valore di ritorno opzionale
-            
-        Returns:
-            str: Stringa vuota se successo, stringa di errore altrimenti
-        """
-        sProc = "JobEnd"
-        sResult = ""
+        return sResult
+
+    def JobCleanup(self):
+        sProc = "JobCleanup"
         
         try:
-            # Leggi file .end se esiste
-            sEndFile = os.path.join(os.getcwd(), "ntjobsapp.end")
-            dictTemp = {}
+            if hasattr(self, 'pidJob') and self.pidJob:
+                if self.pidJob.poll() is None:
+                    self.pidJob.terminate()
+                    try:
+                        self.pidJob.wait(timeout=5)
+                    except subprocess.TimeoutExpired:
+                        self.pidJob.kill()
+                        self.pidJob.wait()
+                self.pidJob = None
+        except Exception as e:
+            return f"{sProc}: Errore - {str(e)}"
+        
+        return ""
+
+    def JobEnd(self, sResult, sValue=""):
+        sProc = "JobEnd"
+        
+        try:
+            # Skip lettura ntjobsapp.end per azioni sys.*
+            if not self.sAction.startswith("sys."):
+                # Lettura ntjobsapp.end
+                dictTemp = {}
+                sJobFileEnd = aiSys.PathMake(os.getcwd(), "ntjobsapp", "end")
+                
+                if os.path.exists(sJobFileEnd):
+                    sResultRead, dictTemp = aiSys.read_ini_to_dict(sJobFileEnd)
+                    if sResultRead == "":
+                        try:
+                            os.remove(sJobFileEnd)
+                        except:
+                            pass
+                        
+                        # Togli entry CONFIG se esiste
+                        if "CONFIG" in dictTemp:
+                            del dictTemp["CONFIG"]
+                        
+                        # Aggiorna dictJob con valori dal file end
+                        if dictTemp:
+                            self.dictJob.update(dictTemp)
             
-            if os.path.exists(sEndFile):
-                try:
-                    temp_ini = configparser.ConfigParser()
-                    temp_ini.optionxform = str
-                    temp_ini.read(sEndFile, encoding='utf-8')
-                    
-                    if "CONFIG" in temp_ini.sections():
-                        for key, value in temp_ini.items("CONFIG"):
-                            dictTemp[key] = value
-                    
-                    # Elimina file .end
-                    os.remove(sEndFile)
-                    
-                except Exception as e:
-                    sResult = f"Errore lettura ntjobsapp.end: {str(e)}"
-            
-            # Torna alla directory del job
-            os.chdir(self.sJobPath)
-            
-            # Aggiorna dictJob con valori di ritorno
-            if dictTemp:
-                # Rimuovi CONFIG se presente
-                dictTemp.pop("CONFIG", None)
-                self.dictJob.update(dictTemp)
-            
-            # Aggiungi timestamp e risultati
+            # Aggiornamento self.dictJob
             self.dictJob["TS.START"] = self.tsJob
             self.dictJob["TS.END"] = aiSys.Timestamp()
             
-            if not sResult:
+            if sResult == "":
                 self.dictJob["RETURN.VALUE"] = sValue
                 self.dictJob["RETURN.TYPE"] = "S"
             else:
                 self.dictJob["RETURN.VALUE"] = f"Errore: {sResult}, Valore: {sValue}"
                 self.dictJob["RETURN.TYPE"] = "E"
             
-            # Aggiorna dictJobs con risultati
+            # Aggiorna il job nel dictJobs
             self.dictJobs[self.sJob] = self.dictJob.copy()
             
-            self.jLog.Log(sResult, f"Terminato job {self.sJob}: {sValue}")
-            return sResult
+            # Reset
+            self.sScript = ""
+            self.sAction = ""
+            self.dictAction = None
+            
+            self.Log(sResult, f"Eseguito Job {self.sJob}: {sValue}")
             
         except Exception as e:
-            sResult = f"{sProc}: Errore - {str(e)}"
-            return sResult
-    
-    def JobInternal(self, sAction: str) -> str:
-        """
-        Gestisce azioni interne del sistema.
+            sResult = f"Eccezione in {sProc}: {str(e)}"
         
-        Args:
-            sAction: Azione interna (sys.*)
-            
-        Returns:
-            str: Stringa vuota se successo, stringa di errore altrimenti
-        """
+        return sResult
+
+    def JobInternal(self, sAction):
         sProc = "JobInternal"
         sResult = ""
         
         try:
             if sAction == "sys.reload":
-                # Crea file per riavvio
-                sReloadFile = os.path.join(self.sSys_PathRoot, "ntJobsOS.reload")
-                with open(sReloadFile, 'w') as f:
-                    f.write("")
-                sResult = "Richiesto riavvio ntJobsOS"
-                
+                sFileReload = aiSys.PathMake(self.sSys_PathRoot, "aiJobsOS", "reload")
+                with open(sFileReload, "w") as f:
+                    f.write(aiSys.Timestamp())
+            
             elif sAction == "sys.quit":
-                # Crea file per uscita
-                sQuitFile = os.path.join(self.sSys_PathRoot, "ntJobsOS.quit")
-                with open(sQuitFile, 'w') as f:
-                    f.write("")
+                sFileQuit = aiSys.PathMake(self.sSys_PathRoot, "aiJobsOS", "quit")
+                with open(sFileQuit, "w") as f:
+                    f.write(aiSys.Timestamp())
                 self.bExitOS = True
-                sResult = "Richiesta uscita ntJobsOS"
-                
+            
             elif sAction == "sys.shutdown":
-                # Crea file per shutdown
-                sShutdownFile = os.path.join(self.sSys_PathRoot, "ntJobsOS.shutdown")
-                with open(sShutdownFile, 'w') as f:
-                    f.write("")
+                sFileShutdown = aiSys.PathMake(self.sSys_PathRoot, "aiJobsOS", "shutdown")
+                with open(sFileShutdown, "w") as f:
+                    f.write(aiSys.Timestamp())
                 self.bExitOS = True
-                sResult = "Richiesto shutdown ntJobsOS"
-                
+            
+            elif sAction == "sys.reboot":
+                sFileReboot = aiSys.PathMake(self.sSys_PathRoot, "aiJobsOS", "reboot")
+                with open(sFileReboot, "w") as f:
+                    f.write(aiSys.Timestamp())
+                self.bExitOS = True
+            
             elif sAction == "sys.email.admin":
-                # Invia mail all'amministratore
-                sResult = self.MailAdmin("Notifica da ntJobsOS", 
-                                        f"Richiesta da utente {self.sUser}")
-                
+                sResult = self.MailAdmin("Notifica da aiJobsOS", 
+                                        f"Comando eseguito dall'utente {self.sUser}")
+            
+            elif sAction == "sys.email.user":
+                sResult = self.MailUser("ntJobs Test Email utente corrente", 
+                                       f"Prova di invio mail da parte dell'utente corrente {self.sUser}")
+            
             else:
                 sResult = f"Azione interna non riconosciuta: {sAction}"
             
-            # Termina job interno
-            self.JobEnd(sResult)
-            return sResult
-            
         except Exception as e:
-            sResult = f"{sProc}: Errore - {str(e)}"
-            return sResult
-    
-    # ========================================================================
-    # METODI DI UTILITÀ
-    # ========================================================================
-    
-    def Login(self) -> str:
-        """
-        Autentica l'utente dal file jobs.ini.
+            sResult = f"Eccezione in {sProc}: {str(e)}"
         
-        Returns:
-            str: Stringa vuota se successo, stringa di errore altrimenti
-        """
+        return sResult
+
+    def Login(self):
         sProc = "Login"
         sResult = ""
         
-        print(f"Esecuzione ntjobsos {sProc}")
-        
         try:
-            # Ottieni credenziali da CONFIG
-            config_section = self.dictJobs.get("CONFIG", {})
-            sUserVerify = config_section.get("USER", "")
-            sPwdVerify = config_section.get("PASSWORD", "")
-            
-            if not sUserVerify or not sPwdVerify:
-                sResult = "Credenziali USER/PASSWORD mancanti in CONFIG"
-                self.jLog.Log0(sResult, "Errore Login")
+            if "CONFIG" not in self.dictJobs:
+                sResult = "Sezione CONFIG non trovata in jobs.ini"
                 return sResult
             
-            # Verifica utente
-            if sUserVerify not in self.JOBS_TAB_USERS:
-                sResult = f"Utente non trovato: {sUserVerify}"
-                self.jLog.Log0(sResult, "Errore Login")
+            dictTemp = self.dictJobs["CONFIG"].copy()
+            sUserVerify = dictTemp.get("USER", "")
+            sPwdVerify = dictTemp.get("PASSWORD", "")
+            
+            if not sUserVerify or sUserVerify not in self.JOBS_TAB_USERS:
+                sResult = f"Utente non trovato {sUserVerify}"
                 return sResult
             
-            # Verifica password
-            user_data = self.JOBS_TAB_USERS[sUserVerify]
-            sUser = user_data.get("USER_ID", "")
-            sPwd = user_data.get("USER_PASSWORD", "")
+            dictUserTemp = self.JOBS_TAB_USERS[sUserVerify].copy()
+            sUser = dictUserTemp.get("USER_ID", "")
+            sPwd = dictUserTemp.get("USER_PASSWORD", "")
             
-            if sUser != sUserVerify or sPwd != sPwdVerify:
+            if sPwd != sPwdVerify or sUser != sUserVerify:
                 sResult = f"Credenziali non valide per utente {sUserVerify}"
-                self.jLog.Log0(sResult, "Errore Login")
                 return sResult
             
-            # Imposta utente corrente
+            # Conversione USER_GROUPS in array
+            sGroups = dictUserTemp.get("USER_GROUPS", "")
+            if sGroups:
+                dictUserTemp["USER_GROUPS"] = aiSys.StringToArray(sGroups)
+            
             self.sUser = sUser
-            self.dictUser = user_data.copy()
+            self.dictUser = dictUserTemp
             
-            # Converti gruppi in array
-            sGroups = user_data.get("USER_GROUPS", "")
-            self.dictUser["USER_GROUPS"] = aiSys.StringToArray(sGroups, ',')
-            
-            self.jLog.Log0(sResult, f"Login utente {self.sUser} completato")
-            return sResult
+            self.Log0(sResult, f"Login utente {sUser}, Risultato: {sResult}")
             
         except Exception as e:
-            sResult = f"{sProc}: Errore - {str(e)}"
-            self.jLog.Log0(sResult, "Errore Login")
-            return sResult
-    
-    def Logoff(self) -> None:
-        """
-        Disconnette l'utente corrente.
-        """
-        sProc = "Logoff"
+            sResult = f"Eccezione in {sProc}: {str(e)}"
         
-        try:
-            self.dictUser = {}
-            self.sUser = ""
-            self.jLog.Log1("Logoff utente")
-            
-        except Exception as e:
-            print(f"{sProc}: Errore - {str(e)}")
-    
-    def Return(self, sResult: str) -> str:
-        """
-        Salva il file jobs.end con i risultati.
-        
-        Args:
-            sResult: Messaggio di risultato
-            
-        Returns:
-            str: Stringa vuota se successo, stringa di errore altrimenti
-        """
-        sProc = "Return"
-        sResultSave = ""
-        
-        try:
-            sEndFile = os.path.join(self.sJobPath, "jobs.end")
-            
-            # Usa jIni per salvare
-            self.jIni.clear()
-            
-            for section, values in self.dictJobs.items():
-                self.jIni[section] = values
-            
-            # Salva file
-            with open(sEndFile, 'w', encoding='utf-8') as f:
-                self.jIni.write(f)
-            
-            self.jLog.Log1(f"Salvato jobs.end in {self.sJobPath}")
-            return sResultSave
-            
-        except Exception as e:
-            sResultSave = f"{sProc}: Errore - {str(e)}"
-            self.jLog.Log0(sResultSave, "Errore in Return")
-            return sResultSave
-    
-    def MailUser(self, sSubject: str, sText: str) -> str:
-        """
-        Invia mail all'utente corrente.
-        
-        Args:
-            sSubject: Oggetto mail
-            sText: Testo mail
-            
-        Returns:
-            str: Stringa vuota se successo, stringa di errore altrimenti
-        """
+        return sResult
+
+    def Logoff(self):
+        self.dictUser = None
+        self.sUser = ""
+        return ""
+
+    def MailUser(self, sSubject, sText):
         sProc = "MailUser"
         sResult = ""
         
         try:
             if not self.dictUser:
-                sResult = "Nessun utente loggato"
+                sResult = "Utente non loggato"
                 return sResult
             
             sUserMail = self.dictUser.get("USER_MAIL", "")
             if not sUserMail:
-                sResult = "Mail utente non configurata"
+                sResult = "Email utente non definita"
                 return sResult
             
             sResult = self.Mail(sUserMail, sSubject, sText, [])
-            return sResult
             
         except Exception as e:
-            sResult = f"{sProc}: Errore - {str(e)}"
-            return sResult
-    
-    def MailAdmin(self, sSubject: str, sText: str) -> str:
-        """
-        Invia mail all'amministratore.
+            sResult = f"Eccezione in {sProc}: {str(e)}"
         
-        Args:
-            sSubject: Oggetto mail
-            sText: Testo mail
-            
-        Returns:
-            str: Stringa vuota se successo, stringa di errore altrimenti
-        """
+        return sResult
+
+    def MailAdmin(self, sSubject, sText):
         sProc = "MailAdmin"
         sResult = ""
         
         try:
-            if not self.sMailAdmin:
-                sResult = "Mail amministratore non configurata"
+            sMail = self.Config("ADMIN.EMAIL")
+            if not sMail:
+                sResult = "Email amministratore non definita"
                 return sResult
             
-            sResult = self.Mail(self.sMailAdmin, sSubject, sText, [])
-            return sResult
+            sResult = self.Mail(sMail, sSubject, sText, [])
             
         except Exception as e:
-            sResult = f"{sProc}: Errore - {str(e)}"
-            return sResult
-    
-    def Mail(self, sTo: str, sSubject: str, sText: str, asFiles: List[str] = None) -> str:
-        """
-        Invia una mail.
+            sResult = f"Eccezione in {sProc}: {str(e)}"
         
-        Args:
-            sTo: Destinatario
-            sSubject: Oggetto
-            sText: Testo
-            asFiles: Lista file da allegare
-            
-        Returns:
-            str: Stringa vuota se successo, stringa di errore altrimenti
-        """
-        sProc = "Mail"
+        return sResult
+
+    def Archive(self):
+        sProc = "Archive"
         sResult = ""
         
         try:
-            if asFiles is None:
-                asFiles = []
+            # 1. Esiste la cartella inbox?
+            if not os.path.exists(self.sSys_PathInbox):
+                return sResult  # Niente da archiviare
+            
+            # 2. VERIFICA NECESSARIA: Esiste la cartella archivio?
+            # (Devi verificarla per poter controllare le sue sottocartelle)
+            if not os.path.exists(self.sSys_PathArchive):
+                # Se non esiste, non possiamo controllare duplicati né spostare
+                # Questo È l'errore che dici "viene ritornato in sResult"
+                sResult = f"Cartella archivio non esiste: {self.sSys_PathArchive}"
+                self.Log1(sResult)
+                return sResult
+            
+            # 3. Scansione delle sottocartelle
+            for sFolder in os.listdir(self.sSys_PathInbox):
+                sPathFound = aiSys.PathMake(self.sSys_PathInbox, sFolder, "")
+                
+                if os.path.isdir(sPathFound):
+                    sFileJobs = aiSys.PathMake(sPathFound, "jobs", "ini")
+                    sFileEnd = aiSys.PathMake(sPathFound, "jobs", "end")
+                    
+                    # 4. Job completato?
+                    if os.path.exists(sFileJobs) and os.path.exists(sFileEnd):
+                        sDestPath = aiSys.PathMake(self.sSys_PathArchive, sFolder, "")
+                        
+                        # 5. Se esiste già: log e skip
+                        if os.path.exists(sDestPath):
+                            self.Log1(f"Errore doppio folder {sPathFound}")
+                            continue  # "non fare nulla"
+                        
+                        # 6. Spostamento
+                        try:
+                            os.rename(sPathFound, sDestPath)
+                            self.Log0("", f"Archiviata cartella {sFolder}")
+                        except Exception as e:
+                            error_msg = f"Errore spostamento {sPathFound} in {self.sSys_PathArchive}. {str(e)}."
+                            sResult += error_msg + " "
+            
+            # 7. Pulizia
+            if sResult.endswith(" "):
+                sResult = sResult[:-1]
+                
+            if sResult != "":
+                self.Log1(sResult)
+                
+        except Exception as e:
+            sResult = f"Eccezione in {sProc}: {str(e)}"
+            self.Log1(sResult)
+        
+        return sResult
+    
+    def Mail(self, sTo, sSubject, sText, asFiles=None):
+        sProc = "Mail"
+        sResult = ""
+        
+        if asFiles is None:
+            asFiles = []
+        
+        try:
+            if not sTo:
+                sResult = "Destinatario non specificato"
+                return sResult
             
             # Verifica file allegati
             for sFile in asFiles:
                 if not os.path.exists(sFile):
-                    sResult = f"File allegato non trovato: {sFile}"
+                    sResult = "File allegati non tutti esistenti"
                     return sResult
             
-            # Invia in base al mail engine
-            if self.sMailEngine == "SMTP" and self.jMail:
-                sResult = self.jMail.Send([sTo], sSubject, asFiles, "TXT", sText)
+            if self.sMailEngine == "SMTP":
+                if not self.jMail:
+                    sResult = "Mail engine SMTP non inizializzato"
+                    return sResult
+                
+                sResult = self.jMail.Send([sTo], sSubject, sText, asFiles, "TXT")
                 
             elif self.sMailEngine == "OLK":
-                # Crea JSON per OLK
+                # Creazione file JSON per OLK
                 mail_data = {
                     "config": {
                         "nWaitStart": 3,
@@ -1717,134 +1344,155 @@ class acJobsOS:
                     }
                 }
                 
-                # Salva JSON
-                sJsonFile = os.path.join(self.sSys_PathOlk, "ntjobs_mail.json")
-                with open(sJsonFile, 'w', encoding='utf-8') as f:
-                    json.dump(mail_data, f, indent=2)
+                sJsonFile = aiSys.PathMake(self.sSys_PathOlk, "ntjobs_mail", "json")
+                try:
+                    with open(sJsonFile, "w") as f:
+                        json.dump(mail_data, f, indent=2)
+                except Exception as e:
+                    sResult = f"Errore creazione file JSON: {str(e)}"
+                    return sResult
                 
-                # Esegui script OLK
                 sCmd = f'"{self.sSys_Olk}" "{sJsonFile}"'
-                subprocess.Popen(sCmd, shell=True)
-                
+                try:
+                    subprocess.Popen(sCmd, shell=True)
+                except Exception as e:
+                    sResult = f"Errore esecuzione comando OLK: {str(e)}"
             else:
                 sResult = "Mail Engine non inizializzato"
             
-            return sResult
-            
         except Exception as e:
-            sResult = f"{sProc}: Errore - {str(e)}"
+            sResult = f"Eccezione in {sProc}: {str(e)}"
+        
+        return sResult
+
+    # =========================================================================
+    # METODI DI CONFIGURAZIONE E LOG
+    # =========================================================================
+    def Config(self, sKey):
+        """
+        Ritorna una configurazione salvata in self.dictConfig
+        Parametro sKey: Stringa "Obbligatorio".
+        
+        Logica:
+        1. Se sKey è stringa vuota, ritorna ""
+        2. Se dictConfig è None, ritorna ""
+        3. Se sKey non esiste in dictConfig, ritorna ""
+        4. Se il valore è None, ritorna ""
+        5. Altrimenti converte il valore in stringa
+        6. Se la conversione fallisce, ritorna ""
+        """
+        sProc = "Config"
+        
+        # 1. Se sKey è vuota
+        if sKey == "":
+            return ""
+        
+        # 2. Se dictConfig è None
+        if self.dictConfig is None:
+            return ""
+        
+        # 3. Se la chiave non esiste in dictConfig
+        if sKey not in self.dictConfig:
+            return ""
+        
+        # 4. Ottieni il valore
+        value = self.dictConfig[sKey]
+        
+        # 5. Se il valore è None, ritorna ""
+        if value is None:
+            return ""
+        
+        # 6. Converti in stringa
+        try:
+            sResult = str(value)
+            # Verifica che la conversione non abbia prodotto "None" come stringa
+            # (nel caso improbabile che qualcuno abbia salvato la stringa "None")
+            if sResult == "None" and value is not None:
+                # Questo caso non dovrebbe mai verificarsi perché value != None
+                # ma è una sicurezza aggiuntiva
+                return ""
             return sResult
-    
-    def Config(self, sKey: str) -> Any:
-        """
-        Ottiene un valore di configurazione.
-        
-        Args:
-            sKey: Chiave di configurazione
-            
-        Returns:
-            Valore di configurazione o stringa vuota
-        """
-        return aiSys.Config(sKey, self.dictConfig)
-    
-    def ConfigUpdate(self) -> str:
-        """
-        Aggiorna il dizionario di configurazione.
-        
-        Returns:
-            str: Stringa vuota se successo, stringa di errore altrimenti
-        """
+        except Exception as e:
+            # 7. Se la conversione fallisce, ritorna ""
+            # Opzionale: log dell'errore (commentato per non appesantire i log)
+            # self.Log1(f"{sProc}: Errore conversione valore '{sKey}': {str(e)}")
+            return ""
+
+    def ConfigUpdate(self):
         sProc = "ConfigUpdate"
         sResult = ""
         
         try:
-            if not self.JOBS_TAB_CONFIG:
+            if self.JOBS_TAB_CONFIG is None:
                 sResult = "Tabella Config.ini non caricata"
-                self.jLog.Log1(sResult)
                 return sResult
             
-            # Inizia con configurazione di sistema
-            self.dictConfig = self.JOBS_TAB_CONFIG.get("CONFIG", {}).copy()
+            dictTemp = self.JOBS_TAB_CONFIG.copy()
             
-            # Aggiungi configurazione da jobs.ini
-            if self.dictJobs and "CONFIG" in self.dictJobs:
-                self.dictConfig.update(self.dictJobs["CONFIG"])
+            if "CONFIG" in self.dictJobs:
+                sResult = aiSys.DictMerge(dictTemp, self.dictJobs["CONFIG"])
+                if sResult != "":
+                    return sResult
             
-            # Espandi configurazione
-            sResult = self.Start_Expand(self.dictConfig, self.dictConfig)
+            sResult = aiSys.ExpandDict(dictTemp, dictTemp)
+            if sResult != "":
+                return sResult
             
-            if sResult:
-                self.jLog.Log1(sResult)
-            
-            return sResult
+            self.dictConfig = dictTemp.copy()
             
         except Exception as e:
-            sResult = f"{sProc}: Errore - {str(e)}"
+            sResult = f"Eccezione in {sProc}: {str(e)}"
+        
+        if sResult != "":
+            self.Log1(sResult)
+        
+        return sResult
+
+    def Log(self, sType, sValue):
+        if self.jLog:
+            self.jLog.Log(sType, sValue)
+
+    def Log0(self, sResult, sValue):
+        if self.jLog:
+            self.jLog.Log0(sResult, sValue)
+
+    def Log1(self, sResult):
+        if self.jLog:
             self.jLog.Log1(sResult)
-            return sResult
-    
-    def ConfigSet(self, sKey: str, xValue: Any) -> None:
-        """
-        Imposta un valore di configurazione.
-        
-        Args:
-            sKey: Chiave di configurazione
-            xValue: Valore da impostare
-        """
-        self.dictConfig[sKey] = xValue
-    
-    def Log(self, sType: str, sValue: str = "") -> None:
-        """Wrapper per jLog.Log."""
-        self.jLog.Log(sType, sValue)
-    
-    def Log0(self, sResult: str, sValue: str = "") -> None:
-        """Wrapper per jLog.Log0."""
-        self.jLog.Log0(sResult, sValue)
-    
-    def Log1(self, sValue: str = "") -> None:
-        """Wrapper per jLog.Log1."""
-        self.jLog.Log1(sValue)
 
-# ============================================================================
-# FUNZIONE PRINCIPALE
-# ============================================================================
 
-def main() -> None:
-    """
-    Funzione principale di ntJobsOS.
-    """
-    print("Avvio ntJobsOS...")
+# =============================================================================
+# FUNZIONE MAIN
+# =============================================================================
+def main():
+    print("=== AVVIO aiJobsOS ===")
     
-    try:
-        # Crea istanza principale
-        jData = acJobsOS()
+    # Istanza della classe
+    jData = acJobsOS()
+    
+    # Inizializzazione
+    sResult = jData.Start()
+    if sResult != "":
+        print(f"Errore in esecuzione ntJobs: {sResult}")
+        return 1
+    
+    # Ciclo principale
+    jData.bExitOS = False
+    while not jData.bExitOS:
+        sResult = jData.Run()
+        if sResult != "":
+            jData.Log1(f"Errore in Esecuzione Run: {sResult}")
         
-        # Inizializza sistema
-        sResult = jData.Start()
-        
-        if sResult:
-            print(f"Errore esecuzione ntJobsOS: {sResult}")
-            return
-        
-        # Ciclo principale
-        while not jData.bExitOS:
-            sResult = jData.Run()
-            
-            if sResult:
-                jData.Log("ERR", f"Errore in Esecuzione Run: {sResult}")
-            
-            jData.CycleEnd()
-        
-        print("ntJobsOS terminato correttamente")
-        
-    except KeyboardInterrupt:
-        print("\nntJobsOS interrotto dall'utente")
-    except Exception as e:
-        print(f"Errore critico in ntJobsOS: {str(e)}")
+        # CycleEnd solo se non ci sono errori
+        if sResult == "":
+            sResult = jData.CycleEnd()
+            if sResult != "":
+                jData.Log1(sResult)
+    
+    print("=== TERMINE aiJobsOS ===")
+    return 0
 
-# ============================================================================
-# ESECUZIONE
-# ============================================================================
 
 if __name__ == "__main__":
-    main()
+    exit_code = main()
+    sys.exit(exit_code)
