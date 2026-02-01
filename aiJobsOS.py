@@ -6,7 +6,7 @@ import json
 
 # Import librerie di supporto
 import aiSys
-from aiDictToString import acDictToString
+from acDictToString import acDictToString
 
 class acJobsOS:
     def __init__(self):
@@ -162,6 +162,7 @@ class acJobsOS:
             ]
             
             # Verifica/inserimento chiavi mancanti
+            print("Set chiavi mancanti")
             for sKey, sValue in defaults:
                 if sKey not in dictTemp:
                     sResult = aiSys.ConfigSet(dictTemp, sKey, sValue)
@@ -170,6 +171,7 @@ class acJobsOS:
                         return f"{sProc}: {sResult}"
             
             # Espansione dizionario
+            print("Espansione diionario")
             dictTemp2 = dictTemp.copy()
             sResult = aiSys.ExpandDict(dictTemp, dictTemp2)
             if sResult != "":

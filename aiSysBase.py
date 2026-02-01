@@ -1,169 +1,134 @@
 """
-aiSysBase.py - Funzioni di base del sistema aiSys
-Contiene funzioni per gestire errori, dizionari e visualizzazione
+aiSysBase.py - Libreria di funzioni base per aiSys.py
 """
 
-from typing import Dict, Any, Optional, Union
 import sys
-
-try:
-    from acDictToString import acDictToString
-except ImportError:
-    # Fallback per quando acDictToString non è disponibile
-    acDictToString = None
+import os
+from typing import Dict, Any, Optional, Union, List
 
 
+# =============================================================================
+# FUNZIONE: aiErrorProc
+# =============================================================================
 def aiErrorProc(sResult: str, sProc: str) -> str:
     """
-    Ritorna stringa di errore formattata con nome della procedura.
+    Ritorna sResult con prefisso sProc se sResult non è vuoto.
     
     Args:
         sResult: Stringa del risultato/errore
-        sProc: Nome della funzione/procedura
+        sProc: Nome della funzione chiamante
         
     Returns:
-        str: Stringa formattata se sResult non è vuoto, altrimenti sResult
-        
-    Example:
-        >>> aiErrorProc("File non trovato", "read_file")
-        'read_file: Errore File non trovato'
-        >>> aiErrorProc("", "read_file")
-        ''
+        str: sResult se vuoto, altrimenti "sProc: Errore sResult"
     """
-    sProc = "aiErrorProc"
+    sProc_func = "aiErrorProc"
+    
     try:
         if sResult != "":
-            return f"{sProc}: Errore {str(sResult)}"
+            return f"{sProc}: Errore {sResult}"
         else:
             return sResult
-    except Exception:
-        return ""
+    except Exception as e:
+        return f"{sProc_func}: Errore - {str(e)}"
 
 
-def DictMerge(dictSource: Dict, dictAdd: Dict) -> Dict:
+# =============================================================================
+# FUNZIONE: DictMerge
+# =============================================================================
+def DictMerge(dictSource: Optional[Dict], dictAdd: Optional[Dict]) -> Optional[Dict]:
     """
-    Unisce due dizionari con priorità su dictAdd.
+    Unisce dictAdd in dictSource con priorità a dictAdd.
     
     Args:
-        dictSource: Dizionario sorgente
-        dictAdd: Dizionario da aggiungere (ha priorità)
+        dictSource: Dizionario destinazione (può essere None o vuoto)
+        dictAdd: Dizionario da aggiungere (può essere None o vuoto)
         
     Returns:
-        Dict: Dizionario unito
-        
-    Example:
-        >>> DictMerge({"a": 1, "b": 2}, {"b": 3, "c": 4})
-        {'a': 1, 'b': 3, 'c': 4}
+        Dict: Dizionario risultante, o None in caso di errore
     """
     sProc = "DictMerge"
+    
     try:
-        # Se dictAdd è None o vuoto, non fare nulla
-        if dictAdd is None or len(dictAdd) == 0:
-            return dictSource
-            
-        # Se dictSource non esiste o è vuoto, ritorna copia di dictAdd
-        if dictSource is None or len(dictSource) == 0:
+        # Se dictSource non esiste o è vuoto, ma dictAdd esiste
+        if (dictSource is None or dictSource == {}) and dictAdd:
             return dictAdd.copy()
-            
-        # Crea copia del sorgente e aggiorna con dictAdd
+        
+        # Se dictAdd è None o vuoto, non fare nulla
+        if dictAdd is None or dictAdd == {}:
+            return dictSource
+        
+        # Assicurati che dictSource sia un dizionario
+        if not isinstance(dictSource, dict):
+            return None
+        
+        # Assicurati che dictAdd sia un dizionario
+        if not isinstance(dictAdd, dict):
+            return None
+        
+        # Unisci i dizionari (dictAdd ha priorità)
         result = dictSource.copy()
-        result.update(dictAdd)
+        for key, value in dictAdd.items():
+            result[key] = value
+            
         return result
         
     except Exception as e:
-        # In caso di errore, ritorna dictSource se esiste
-        if dictSource is not None:
-            return dictSource
-        return {}
+        return None
 
 
-def DictPrint(jDS: acDictToString, dictData: Dict, sFile: Optional[str] = None) -> str:
+# =============================================================================
+# FUNZIONE: DictExist
+# =============================================================================
+def DictExist(dictParam: Any, sKey: str, xDefault: Any = None) -> Any:
     """
-    Visualizza un dizionario su schermo o su file in accodamento.
+    Ritorna il valore di una chiave o un valore di default.
     
     Args:
-        jDS: Istanza della classe acDictToString
-        dictData: Dizionario da visualizzare
-        sFile: File opzionale dove accodare l'output
+        dictParam: Dizionario da esaminare
+        sKey: Chiave da cercare
+        xDefault: Valore di default se la chiave non esiste
         
     Returns:
-        str: Stringa vuota in caso di successo, stringa di errore altrimenti
-        
-    Example:
-        >>> converter = acDictToString()
-        >>> DictPrint(converter, {"nome": "Mario"}, "output.txt")
-        ''
+        Any: Valore della chiave o xDefault
     """
-    sProc = "DictPrint"
+    sProc = "DictExist"
+    
     try:
-        # Verifica che jDS sia valido
-        if jDS is None or not isinstance(jDS, acDictToString):
-            return f"{sProc}: Errore Istanza acDictToString non valida"
-            
-        # Verifica che dictData sia valido
-        if dictData is None or not isinstance(dictData, dict):
-            return f"{sProc}: Errore Dizionario non valido"
-            
-        # Converti il dizionario in stringa JSON
-        sText = jDS.DictToString(dictData, "json")
+        xResult = None
         
-        # Se sFile è fornito, scrive su file
-        if sFile:
-            try:
-                with open(sFile, 'a', encoding='utf-8') as f:
-                    f.write(sText + '\n')
-            except Exception as e:
-                return f"{sProc}: ErroreRiscontrato {e} {sFile}"
+        # Se dictParam non è un dizionario
+        if not isinstance(dictParam, dict):
+            return xResult
         
-        # Mostra sempre su schermo
-        print(sText)
-        return ""  # Successo -> stringa vuota
+        # Se la chiave non esiste
+        if sKey not in dictParam:
+            xResult = xDefault
+        else:
+            xResult = dictParam[sKey]
+            
+        return xResult
         
     except Exception as e:
-        sResult = f"ErroreRiscontrato {e}"
-        if sFile:
-            sResult += f" {sFile}"
-        return sResult
+        return None
 
 
-# Test delle funzioni se eseguito direttamente
-if __name__ == "__main__":
-    print("Test aiSysBase.py")
-    print("=" * 50)
+# =============================================================================
+# FUNZIONE: loc_aiErrorProc (per uso interno nei moduli)
+# =============================================================================
+def loc_aiErrorProc(sResult: str, sProc: str) -> str:
+    """
+    Versione locale di aiErrorProc per uso nei moduli.
     
-    # Test aiErrorProc
-    print("1. Test aiErrorProc:")
-    print(f"   Successo: '{aiErrorProc('', 'test_func')}'")
-    print(f"   Errore: '{aiErrorProc('File non trovato', 'test_func')}'")
-    
-    # Test DictMerge
-    print("\n2. Test DictMerge:")
-    dict1 = {"a": 1, "b": 2}
-    dict2 = {"b": 3, "c": 4}
-    result = DictMerge(dict1, dict2)
-    print(f"   DictMerge({{'a':1, 'b':2}}, {{'b':3, 'c':4}}) = {result}")
-    
-    # Test DictMerge con dictAdd vuoto
-    result2 = DictMerge(dict1, {})
-    print(f"   DictMerge({{'a':1, 'b':2}}, {{}}) = {result2}")
-    
-    # Test DictMerge con dictSource vuoto
-    result3 = DictMerge({}, dict2)
-    print(f"   DictMerge({{}}, {{'b':3, 'c':4}}) = {result3}")
-    
-    # Test DictPrint (richiede acDictToString)
-    print("\n3. Test DictPrint:")
+    Args:
+        sResult: Stringa del risultato/errore
+        sProc: Nome della funzione chiamante
+        
+    Returns:
+        str: sResult se vuoto, altrimenti "sProc: Errore sResult"
+    """
     try:
-        from acDictToString import acDictToString
-        converter = acDictToString()
-        print(f"   DictPrint con dizionario semplice:")
-        dict_simple = {"nome": "Test", "valore": 123}
-        error = DictPrint(converter, dict_simple)
-        if error:
-            print(f"   ERRORE: {error}")
-        else:
-            print(f"   SUCCESSO: Dizionario stampato")
-    except ImportError:
-        print("   SKIPPATO: acDictToString non disponibile")
-    
-    print("\nTest completati!")
+        if sResult != "":
+            return f"{sProc}: Errore {sResult}"
+        return ""
+    except Exception:
+        return ""
