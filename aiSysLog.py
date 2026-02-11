@@ -1,128 +1,106 @@
-"""
-aiSysLog.py - Classe per la gestione dei log
-"""
-
+"""Modulo per la gestione dei log"""
+from typing import Dict, Any, Optional, Union, List
 import os
 import sys
-from datetime import datetime
-from typing import Optional
+from aiSysTimestamp import Timestamp
+from aiSysBase import ErrorProc
 
-def loc_aiErrorProc(sResult: str, sProc: str) -> str:
-    """
-    Funzione locale per la gestione errori.
-    
-    Args:
-        sResult: Stringa errore
-        sProc: Nome della procedura
-    
-    Returns:
-        str: Stringa formattata o vuota
-    """
-    if sResult != "":
-        return f"{sProc}: Errore {sResult}"
-    return ""
-
-
-def loc_Timestamp(sPostfix: str = "") -> str:
-    """
-    Funzione interna Timestamp (uguale a aiSysTimestamp.Timestamp).
-    
-    Args:
-        sPostfix: Suffisso opzionale
-    
-    Returns:
-        str: Timestamp formattato
-    """
-    try:
-        now = datetime.now()
-        sTimestamp = now.strftime("%Y%m%d:%H%M%S")
-        
-        if sPostfix:
-            return f"{sTimestamp}:{sPostfix.lower()}"
-        return sTimestamp
-        
-    except Exception:
-        return ""
+# Crea alias locali
+loc_Timestamp = Timestamp
+loc_ErrorProc = ErrorProc
 
 
 class acLog:
-    """
-    Classe per la gestione dei log.
-    """
+    """Classe per la gestione dei log"""
     
     def __init__(self):
+        """Inizializza l'oggetto log"""
         self.sLog = ""
         self.sAppName = ""
-    
+        
     def Start(self, sLogfile: Optional[str] = None, sLogFolder: Optional[str] = None) -> str:
         """
-        Inizializza il campo interno self.sLog.
+        Inizializza il file di log.
         
         Args:
-            sLogfile: Nome file di log
-            sLogFolder: Cartella dei log
-        
+            sLogfile: Nome file log (opzionale)
+            sLogFolder: Cartella log (opzionale)
+            
         Returns:
-            str: Stringa vuota se successo, errore formattato altrimenti
+            str: sResult
         """
-        sResult = ""
         sProc = "Start"
         
         try:
-            if hasattr(sys, 'argv') and len(sys.argv) > 0:
-                app_path = sys.argv[0]
-                self.sAppName = os.path.splitext(os.path.basename(app_path))[0]
-            else:
-                self.sAppName = "unknown"
+            sResult = ""
             
-            if not sLogFolder:
-                sLogFolder = os.getcwd()
+            # Calcola nome applicazione
+            self.sAppName = self._get_app_name()
             
-            if not sLogfile:
+            # Determina cartella log
+            if not sLogFolder or sLogFolder == "":
+                sLogFolder = os.path.dirname(os.path.abspath(sys.argv[0]))
+            
+            # Determina nome file log
+            if not sLogfile or sLogfile == "":
                 sLogfile = self.sAppName
             
-            if not sLogFolder.endswith(os.sep):
-                sLogFolder += os.sep
-            
+            # Crea percorso completo
             self.sLog = os.path.join(sLogFolder, f"{sLogfile}.log")
             
+            # Crea directory se non esiste
             os.makedirs(os.path.dirname(self.sLog), exist_ok=True)
             
-            return ""
+            return sResult
             
         except Exception as e:
             sResult = f"Errore Log.Start: {str(e)}"
-            return loc_aiErrorProc(sResult, sProc)
+            return loc_ErrorProc(sResult, sProc)
+    
+    def _get_app_name(self) -> str:
+        """Ottiene il nome dell'applicazione corrente."""
+        try:
+            app_path = sys.argv[0]
+            app_filename = os.path.basename(app_path)
+            app_name, _ = os.path.splitext(app_filename)
+            return app_name
+        except:
+            return "unknown_app"
     
     def Log(self, sType: str, sValue: str = "") -> None:
         """
-        Salva una riga di log nel file.
+        Scrive una riga nel log.
         
         Args:
-            sType: Tipo di log (postfix per timestamp)
-            sValue: Valore del log
+            sType: Tipo di log (postfix)
+            sValue: Valore da loggare
         """
         if not self.sLog:
             return
-        
-        try:
-            sLine = f"{loc_Timestamp(sType)}:{sValue}"
             
+        try:
+            # Crea riga di log
+            timestamp = loc_Timestamp(sType)
+            sLine = f"{timestamp}:{sValue}"
+            
+            # Scrivi su console
             print(sLine)
             
+            # Scrivi su file
             with open(self.sLog, 'a', encoding='utf-8') as f:
-                f.write(sLine + '\n')
+                f.write(sLine + "\n")
                 
         except Exception:
+            # Ignora errori di scrittura log
             pass
     
     def Log0(self, sResult: str, sValue: str = "") -> None:
         """
-        Esegue Log in base al valore di sResult.
+        Logga con gestione automatica del tipo.
         
         Args:
             sResult: Risultato (se vuoto = INFO, altrimenti ERR)
-            sValue: Valore del log
+            sValue: Valore aggiuntivo
         """
         if sResult != "":
             self.Log("ERR", f"{sResult}: {sValue}")
@@ -131,20 +109,11 @@ class acLog:
     
     def Log1(self, sValue: str = "") -> None:
         """
-        Esegue Log di tipo INFO.
+        Logga come INFO.
         
         Args:
-            sValue: Valore del log
+            sValue: Valore da loggare
         """
         self.Log("INFO", sValue)
-    
-    def Timestamp(self) -> str:
-        """
-        Ritorna timestamp corrente (uguale a aiSys.Timestamp()).
-        
-        Returns:
-            str: Timestamp formattato
-        """
-        return loc_Timestamp()
 
 

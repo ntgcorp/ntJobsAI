@@ -1,50 +1,63 @@
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
 """
-aiSysTimestamp.py - Funzioni per la gestione del timestamp
+aiSysTimestamp.py - Libreria per la gestione dei timestamp
 """
 
+import os
+import sys
+from typing import Dict, Any, Optional, Union, List, Tuple
 from datetime import datetime, timedelta
-from typing import Union
+
+# Import delle funzioni base
+from aiSysBase import ErrorProc
+
+# Crea alias locali
+loc_ErrorProc = ErrorProc
 
 def Timestamp(sPostfix: str = "") -> str:
     """
-    Calcola la stringa di default TimeStamp.
+    Genera un timestamp nel formato AAAAMMGG:HHMMSS.
     
     Args:
-        sPostfix: Suffisso opzionale
+        sPostfix: Suffisso opzionale da aggiungere al timestamp
     
     Returns:
-        str: Timestamp formattato AAAAMMGG:HHMMSS[:postfix]
+        str: Timestamp formattato, stringa vuota in caso di errore
     """
     sProc = "Timestamp"
-    
     try:
+        # Ottieni la data/ora corrente
         now = datetime.now()
-        sTimestamp = now.strftime("%Y%m%d:%H%M%S")
         
+        # Formatta nel formato richiesto: AAAAMMGG:HHMMSS
+        sResult = now.strftime("%Y%m%d:%H%M%S")
+        
+        # Se è stato fornito un postfix, aggiungilo in minuscolo
         if sPostfix:
-            return f"{sTimestamp}:{sPostfix.lower()}"
-        return sTimestamp
+            sResult = f"{sResult}:{sPostfix.lower()}"
         
-    except Exception:
-        return ""
-
+        return sResult
+    except Exception as e:
+        return loc_ErrorProc(str(e), sProc)
 
 def TimestampConvert(sTimestamp: str, sMode: str = "s") -> Union[int, float, None]:
     """
-    Converte l'output di Timestamp() in giorni o secondi.
+    Converte l'output della funzione Timestamp() in giorni o secondi.
     
     Args:
         sTimestamp: Stringa nel formato "AAAAMMGG:HHMMSS" o "AAAAMMGG:HHMMSS:postfix"
         sMode: "d" per giorni (float), "s" per secondi (int)
     
     Returns:
-        Union[int, float, None]: Giorni o secondi dall'epoch, None in caso di errore
+        - In modalità "d": float (giorni con decimali)
+        - In modalità "s": int (secondi totali)
+        - None in caso di errore
     """
     sProc = "TimestampConvert"
-    
     try:
         if not sTimestamp:
-            sTimestamp = Timestamp()
+            sTimestamp = Timestamp("")
         
         if ':' in sTimestamp:
             parts = sTimestamp.split(':')
@@ -77,12 +90,10 @@ def TimestampConvert(sTimestamp: str, sMode: str = "s") -> Union[int, float, Non
             return int(delta.total_seconds())
         else:
             return None
-            
-    except (ValueError, TypeError):
-        return None
-    except Exception:
-        return None
-
+    except (ValueError, TypeError) as e:
+        return loc_ErrorProc(str(e), sProc)
+    except Exception as e:
+        return loc_ErrorProc(str(e), sProc)
 
 def TimestampFromSeconds(nSeconds: int, sPostfix: str = "") -> str:
     """
@@ -96,7 +107,6 @@ def TimestampFromSeconds(nSeconds: int, sPostfix: str = "") -> str:
         str: Timestamp formattato, stringa vuota in caso di errore
     """
     sProc = "TimestampFromSeconds"
-    
     try:
         dt = datetime(1970, 1, 1) + timedelta(seconds=nSeconds)
         sTimestamp = dt.strftime("%Y%m%d:%H%M%S")
@@ -104,10 +114,8 @@ def TimestampFromSeconds(nSeconds: int, sPostfix: str = "") -> str:
         if sPostfix:
             return f"{sTimestamp}:{sPostfix.lower()}"
         return sTimestamp
-        
-    except Exception:
-        return ""
-
+    except Exception as e:
+        return loc_ErrorProc(str(e), sProc)
 
 def TimestampFromDays(nDays: float, sPostfix: str = "") -> str:
     """
@@ -121,14 +129,11 @@ def TimestampFromDays(nDays: float, sPostfix: str = "") -> str:
         str: Timestamp formattato, stringa vuota in caso di errore
     """
     sProc = "TimestampFromDays"
-    
     try:
         seconds = int(nDays * 86400.0)
         return TimestampFromSeconds(seconds, sPostfix)
-        
-    except Exception:
-        return ""
-
+    except Exception as e:
+        return loc_ErrorProc(str(e), sProc)
 
 def TimestampValidate(sTimestamp: str) -> bool:
     """
@@ -141,7 +146,6 @@ def TimestampValidate(sTimestamp: str) -> bool:
         bool: True se valido, False altrimenti
     """
     sProc = "TimestampValidate"
-    
     try:
         if not sTimestamp:
             return False
@@ -176,23 +180,16 @@ def TimestampValidate(sTimestamp: str) -> bool:
         if not (0 <= second <= 59):
             return False
         
-        # Controllo giorni nel mese
-        if month == 2:
-            is_leap = (year % 4 == 0 and (year % 100 != 0 or year % 400 == 0))
-            days_in_month = 29 if is_leap else 28
-        elif month in [4, 6, 9, 11]:
-            days_in_month = 30
-        else:
-            days_in_month = 31
+        # Controlla giorni nel mese considerando gli anni bisestili
+        days_in_month = [31, 29 if (year % 4 == 0 and (year % 100 != 0 or year % 400 == 0)) else 28,
+                        31, 30, 31, 30, 31, 31, 30, 31, 30, 31]
         
-        if day > days_in_month:
+        if day > days_in_month[month - 1]:
             return False
         
         return True
-        
     except (ValueError, TypeError):
         return False
-
 
 def TimestampDiff(sTimestamp1: str, sTimestamp2: str, sMode: str = "s") -> Union[int, float, None]:
     """
@@ -204,10 +201,9 @@ def TimestampDiff(sTimestamp1: str, sTimestamp2: str, sMode: str = "s") -> Union
         sMode: "d" per giorni, "s" per secondi
     
     Returns:
-        Union[int, float, None]: Differenza in giorni o secondi, None in caso di errore
+        Differenza in giorni o secondi, None in caso di errore
     """
     sProc = "TimestampDiff"
-    
     try:
         if not TimestampValidate(sTimestamp1) or not TimestampValidate(sTimestamp2):
             return None
@@ -226,10 +222,8 @@ def TimestampDiff(sTimestamp1: str, sTimestamp2: str, sMode: str = "s") -> Union
             return diff_seconds
         else:
             return None
-            
-    except Exception:
-        return None
-
+    except Exception as e:
+        return loc_ErrorProc(str(e), sProc)
 
 def TimestampAdd(sTimestamp: str, nValue: Union[int, float], sUnit: str = "s") -> str:
     """
@@ -244,14 +238,13 @@ def TimestampAdd(sTimestamp: str, nValue: Union[int, float], sUnit: str = "s") -
         str: Nuovo timestamp, stringa vuota in caso di errore
     """
     sProc = "TimestampAdd"
-    
     try:
         if not TimestampValidate(sTimestamp):
-            return ""
+            return loc_ErrorProc("Timestamp non valido", sProc)
         
         seconds = TimestampConvert(sTimestamp, "s")
         if seconds is None:
-            return ""
+            return loc_ErrorProc("Conversione timestamp fallita", sProc)
         
         if sUnit.lower() == "s":
             seconds_to_add = nValue
@@ -262,12 +255,70 @@ def TimestampAdd(sTimestamp: str, nValue: Union[int, float], sUnit: str = "s") -
         elif sUnit.lower() == "d":
             seconds_to_add = nValue * 86400
         else:
-            return ""
+            return loc_ErrorProc(f"Unita' non valida: {sUnit}", sProc)
         
         new_seconds = seconds + int(seconds_to_add)
         return TimestampFromSeconds(new_seconds)
+    except Exception as e:
+        return loc_ErrorProc(str(e), sProc)
+
+def TimestampIsoFrom(ts: str, milliseconds: str = "000", tz: str = "Z") -> str:
+    """
+    Converte 'AAAAMMGG:HHMMSS' in stringa ISO 8601.
+    
+    Args:
+        ts: Timestamp nel formato AAAAMMGG:HHMMSS
+        milliseconds: Millisecondi (default: '000')
+        tz: Timezone (default: 'Z')
+    
+    Returns:
+        str: Stringa ISO 8601
+    """
+    sProc = "TimestampIsoFrom"
+    try:
+        date_part, time_part = ts.split(":")
+        year = date_part[0:4]
+        month = date_part[4:6]
+        day = date_part[6:8]
+        hour = time_part[0:2]
+        minute = time_part[2:4]
+        second = time_part[4:6]
         
-    except Exception:
-        return ""
+        return f"{year}-{month}-{day}T{hour}:{minute}:{second}.{milliseconds}{tz}"
+    except Exception as e:
+        return loc_ErrorProc(str(e), sProc)
 
+def TimestampIsoTo(iso_ts: str) -> str:
+    """
+    Converte una stringa ISO 8601 in 'AAAAMMGG:HHMMSS'.
+    
+    Args:
+        iso_ts: Stringa ISO 8601
+    
+    Returns:
+        str: Timestamp nel formato AAAAMMGG:HHMMSS
+    """
+    sProc = "TimestampIsoTo"
+    try:
+        # Gestione 'Z' → UTC
+        if iso_ts.endswith("Z"):
+            iso_ts = iso_ts.replace("Z", "+00:00")
+        
+        dt = datetime.fromisoformat(iso_ts)
+        return dt.strftime("%Y%m%d:%H%M%S")
+    except Exception as e:
+        return loc_ErrorProc(str(e), sProc)
 
+# Test locale se eseguito direttamente
+if __name__ == "__main__":
+    print(f"Timestamp corrente: {Timestamp()}")
+    print(f"Timestamp con postfix: {Timestamp('test')}")
+    
+    ts = Timestamp()
+    print(f"Timestamp validato: {TimestampValidate(ts)}")
+    print(f"Timestamp in secondi: {TimestampConvert(ts, 's')}")
+    print(f"Timestamp in giorni: {TimestampConvert(ts, 'd')}")
+    
+    ts_iso = TimestampIsoFrom(ts)
+    print(f"Timestamp ISO: {ts_iso}")
+    print(f"Timestamp da ISO: {TimestampIsoTo(ts_iso)}")

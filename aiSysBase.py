@@ -1,106 +1,72 @@
-"""
-aiSysBase.py - Libreria di funzioni base per aiSys.py
-"""
-
-import sys
-import os
+"""Modulo base con funzioni fondamentali per aiSys"""
 from typing import Dict, Any, Optional, Union, List
 
 
-# =============================================================================
-# FUNZIONE: aiErrorProc
-# =============================================================================
-def aiErrorProc(sResult: str, sProc: str) -> str:
+def ErrorProc(sResult: str, sProc: str) -> str:
     """
-    Ritorna sResult con prefisso sProc se sResult non è vuoto.
+    Ritorno con Errore sProc aggiunto.
     
     Args:
-        sResult: Stringa del risultato/errore
-        sProc: Nome della funzione chiamante
+        sResult: Stringa di errore (obbligatoria)
+        sProc: Nome della funzione chiamante (obbligatorio)
         
     Returns:
-        str: sResult se vuoto, altrimenti "sProc: Errore sResult"
+        str: Stringa formattata con errore o stringa vuota
     """
-    sProc_func = "aiErrorProc"
-    
-    try:
-        if sResult != "":
-            return f"{sProc}: Errore {sResult}"
-        else:
-            return sResult
-    except Exception as e:
-        return f"{sProc_func}: Errore - {str(e)}"
+    if sResult != "":
+        return f"{sProc}: Errore {sResult}"
+    else:
+        return sResult
 
 
-# =============================================================================
-# FUNZIONE: DictMerge
-# =============================================================================
-def DictMerge(dictSource: Optional[Dict], dictAdd: Optional[Dict]) -> Optional[Dict]:
+def DictMerge(dictSource: Dict, dictAdd: Dict) -> None:
     """
-    Unisce dictAdd in dictSource con priorità a dictAdd.
+    Aggiunge le chiavi di dictAdd a dictSource.
     
     Args:
-        dictSource: Dizionario destinazione (può essere None o vuoto)
-        dictAdd: Dizionario da aggiungere (può essere None o vuoto)
-        
-    Returns:
-        Dict: Dizionario risultante, o None in caso di errore
+        dictSource: Dizionario da aggiornare
+        dictAdd: Dizionario da aggiungere
     """
     sProc = "DictMerge"
     
     try:
-        # Se dictSource non esiste o è vuoto, ma dictAdd esiste
-        if (dictSource is None or dictSource == {}) and dictAdd:
-            return dictAdd.copy()
+        if not dictAdd or not isinstance(dictAdd, dict):
+            return
         
-        # Se dictAdd è None o vuoto, non fare nulla
-        if dictAdd is None or dictAdd == {}:
-            return dictSource
+        if not dictSource or not isinstance(dictSource, dict):
+            if isinstance(dictAdd, dict):
+                dictSource.clear()
+                dictSource.update(dictAdd)
+            return
         
-        # Assicurati che dictSource sia un dizionario
-        if not isinstance(dictSource, dict):
-            return None
-        
-        # Assicurati che dictAdd sia un dizionario
-        if not isinstance(dictAdd, dict):
-            return None
-        
-        # Unisci i dizionari (dictAdd ha priorità)
-        result = dictSource.copy()
+        # Aggiunge o sovrascrive le chiavi
         for key, value in dictAdd.items():
-            result[key] = value
+            dictSource[key] = value
             
-        return result
-        
     except Exception as e:
-        return None
+        return ErrorProc(str(e), sProc)
 
 
-# =============================================================================
-# FUNZIONE: DictExist
-# =============================================================================
-def DictExist(dictParam: Any, sKey: str, xDefault: Any = None) -> Any:
+def DictExist(dictParam: Dict, sKey: str, xDefault: Any) -> Any:
     """
-    Ritorna il valore di una chiave o un valore di default.
+    Ritorna valore di una chiave oppure un valore di default.
     
     Args:
         dictParam: Dizionario da esaminare
         sKey: Chiave da cercare
-        xDefault: Valore di default se la chiave non esiste
+        xDefault: Valore di default
         
     Returns:
-        Any: Valore della chiave o xDefault
+        Any: Valore della chiave o default
     """
     sProc = "DictExist"
     
     try:
         xResult = None
         
-        # Se dictParam non è un dizionario
         if not isinstance(dictParam, dict):
-            return xResult
+            return xDefault
         
-        # Se la chiave non esiste
         if sKey not in dictParam:
             xResult = xDefault
         else:
@@ -109,26 +75,6 @@ def DictExist(dictParam: Any, sKey: str, xDefault: Any = None) -> Any:
         return xResult
         
     except Exception as e:
-        return None
+        return ErrorProc(str(e), sProc)
 
 
-# =============================================================================
-# FUNZIONE: loc_aiErrorProc (per uso interno nei moduli)
-# =============================================================================
-def loc_aiErrorProc(sResult: str, sProc: str) -> str:
-    """
-    Versione locale di aiErrorProc per uso nei moduli.
-    
-    Args:
-        sResult: Stringa del risultato/errore
-        sProc: Nome della funzione chiamante
-        
-    Returns:
-        str: sResult se vuoto, altrimenti "sProc: Errore sResult"
-    """
-    try:
-        if sResult != "":
-            return f"{sProc}: Errore {sResult}"
-        return ""
-    except Exception:
-        return ""

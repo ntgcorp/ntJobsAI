@@ -1,79 +1,65 @@
-"""
-aiSysDictToString.py - Funzioni per convertire dizionari in stringhe
-"""
-
+"""Modulo per la conversione di dizionari in stringhe"""
+from typing import Dict, Any, Optional, Union, List, Tuple
 import json
-import re
 import xml.etree.ElementTree as ET
-from typing import Dict, Any, Tuple
-import html
+from xml.dom import minidom
+from aiSysBase import ErrorProc
 
-def loc_aiErrorProc(sResult: str, sProc: str) -> str:
-    """
-    Funzione locale per la gestione errori.
-    
-    Args:
-        sResult: Stringa errore
-        sProc: Nome della procedura
-    
-    Returns:
-        str: Stringa formattata o vuota
-    """
-    if sResult != "":
-        return f"{sProc}: Errore {sResult}"
-    return ""
+# Crea alias locale
+loc_ErrorProc = ErrorProc
 
 
-def DictPrint(dictParam: Dict[str, Any], sFile: str = "") -> str:
+def DictPrint(dictParam: Dict, sFile: Optional[str] = None) -> str:
     """
-    Visualizza un dizionario su schermo o su file in accodamento.
+    Visualizza un dizionario su schermo o su file.
     
     Args:
         dictParam: Dizionario da visualizzare
         sFile: File dove accodare (opzionale)
-    
+        
     Returns:
-        str: Stringa vuota se successo, errore formattato altrimenti
+        str: sResult
     """
     sProc = "DictPrint"
     
     try:
+        sResult = ""
+        
         if not isinstance(dictParam, dict):
             dictParam = {}
         
-        sResult, sText = DictToString(dictParam, "json")
+        # Converte in stringa JSON
+        sText = DictToString(dictParam, "json")
         
-        if sResult:
-            error_msg = sResult + " " + sFile if sFile else sResult
-            return loc_aiErrorProc(error_msg, sProc)
+        # Stampa su schermo
+        print(sText[1])  # sOutput è il secondo elemento della tupla
         
-        print(sText)
-        
+        # Scrivi su file se specificato
         if sFile:
             try:
                 with open(sFile, 'a', encoding='utf-8') as f:
-                    f.write(sText + '\n')
+                    f.write(sText[1] + "\n")
             except Exception as e:
-                sResult = str(e) + " " + sFile
-                return loc_aiErrorProc(sResult, sProc)
+                sResult = f"Errore scrittura file {sFile}: {str(e)}"
+                return loc_ErrorProc(sResult, sProc)
         
-        return ""
+        return sResult
         
     except Exception as e:
-        sResult = str(e) + " " + sFile if sFile else str(e)
-        return loc_aiErrorProc(sResult, sProc)
+        sResult = str(e) + f" {sFile if sFile else ''}"
+        return loc_ErrorProc(sResult, sProc)
 
 
-def DictToXml(dictParam: Dict[str, Any], **xml_options) -> str:
+def DictToXml(dictParam: Dict, **xml_options) -> str:
     """
     Converte un dizionario in stringa XML.
     
     Args:
         dictParam: Dizionario da convertire
         **xml_options: Opzioni XML
-    
+        
     Returns:
-        str: Stringa XML o stringa vuota in caso di errore
+        str: Stringa XML o vuota in caso di errore
     """
     sProc = "DictToXml"
     
@@ -81,6 +67,7 @@ def DictToXml(dictParam: Dict[str, Any], **xml_options) -> str:
         if not isinstance(dictParam, dict):
             dictParam = {}
         
+        # Opzioni di default
         options = {
             'root_tag': 'root',
             'attr_prefix': '@',
@@ -92,66 +79,90 @@ def DictToXml(dictParam: Dict[str, Any], **xml_options) -> str:
         }
         options.update(xml_options)
         
-        def dict_to_xml_element(tag: str, data: Any) -> ET.Element:
-            element = ET.Element(tag)
+        # Funzione ricorsiva per convertire
+        def dict_to_xml_element(tag, data):
+            # Gestisci namespace
+            if ':' in tag:
+                ns, tag_name = tag.split(':', 1)
+                element = ET.Element(f'{{{ns}}}{tag_name}')
+            else:
+                element = ET.Element(tag)
             
+            # Se data è una stringa semplice
+            if isinstance(data, (str, int, float, bool)):
+                element.text = str(data)
+                return element
+            
+            # Se data è un dizionario
             if isinstance(data, dict):
+                # Separa attributi e elementi figli
                 attrs = {}
-                child_data = {}
+                children = {}
                 
                 for key, value in data.items():
                     if key.startswith(options['attr_prefix']):
                         attr_name = key[len(options['attr_prefix']):]
-                        attrs[attr_name] = str(value)
+                        element.set(attr_name, str(value))
                     elif key == options['text_key']:
                         element.text = str(value)
                     elif key == options['cdata_key']:
-                        element.text = str(value)
+                        # CDATA section
+                        cdata = minidom.CDATASection(str(value))
+                        element.append(cdata)
+                    elif key.startswith('xmlns:') or key == 'xmlns':
+                        # Namespace
+                        if ':' in key:
+                            prefix = key.split(':', 1)[1]
+                            ET.register_namespace(prefix, str(value))
+                        element.set(key, str(value))
                     else:
-                        child_data[key] = value
+                        children[key] = value
                 
-                for attr_name, attr_value in attrs.items():
-                    element.set(attr_name, attr_value)
-                
-                for key, value in child_data.items():
+                # Processa elementi figli
+                for key, value in children.items():
                     if isinstance(value, list):
+                        # Array di elementi
                         for item in value:
-                            element.append(dict_to_xml_element(key, item))
+                            child_element = dict_to_xml_element(key, item)
+                            element.append(child_element)
                     else:
-                        element.append(dict_to_xml_element(key, value))
-                        
+                        child_element = dict_to_xml_element(key, value)
+                        element.append(child_element)
+            
+            # Se data è una lista
             elif isinstance(data, list):
                 for item in data:
-                    element.append(dict_to_xml_element(options['item_name'], item))
-            else:
-                element.text = str(data)
+                    child_element = dict_to_xml_element(options['item_name'], item)
+                    element.append(child_element)
             
             return element
         
-        root = dict_to_xml_element(options['root_tag'], dictParam)
+        # Crea elemento radice
+        root_element = dict_to_xml_element(options['root_tag'], dictParam)
         
+        # Converti in stringa
+        xml_string = ET.tostring(root_element, encoding='unicode')
+        
+        # Pretty print se richiesto
         if options['pretty']:
-            from xml.dom import minidom
-            rough_string = ET.tostring(root, encoding='unicode')
-            parsed = minidom.parseString(rough_string)
-            sXML = parsed.toprettyxml(indent="  ")
-        else:
-            sXML = ET.tostring(root, encoding='unicode')
+            parsed = minidom.parseString(xml_string)
+            xml_string = parsed.toprettyxml(indent="  ")
         
-        return sXML
+        return xml_string
         
-    except Exception:
+    except Exception as e:
+        loc_ErrorProc(str(e), sProc)
         return ""
 
 
-def DictToString(dictParam: Dict[str, Any], sFormat: str = "json") -> Tuple[str, str]:
+def DictToString(dictParam: Dict, sFormat: str = "json") -> Tuple[str, str]:
     """
-    Converte un dizionario in stringa (JSON, INI, INI con sezioni).
+    Converte un dizionario in stringa nei formati supportati.
     
     Args:
         dictParam: Dizionario da convertire
-        sFormat: Formato di output ("json", "ini", "ini.sect")
-    
+        sFormat: Formato ("json", "ini", "ini.sect")
+        
     Returns:
         Tuple[str, str]: (sResult, sOutput)
     """
@@ -166,100 +177,102 @@ def DictToString(dictParam: Dict[str, Any], sFormat: str = "json") -> Tuple[str,
         
         if sFormat == "json":
             try:
-                sOutput = json.dumps(dictParam, indent=2, ensure_ascii=True, default=str)
+                # Converte in JSON con indentazione
+                sOutput = json.dumps(dictParam, indent=2, ensure_ascii=True)
             except Exception as e:
                 sResult = str(e)
                 sOutput = ""
         
         elif sFormat == "ini":
-            try:
-                lines = []
-                for key, value in dictParam.items():
-                    if isinstance(value, dict):
-                        continue
-                    
-                    str_value = ""
-                    if value is None:
-                        str_value = ""
-                    elif isinstance(value, bool):
-                        str_value = "true" if value else "false"
-                    elif isinstance(value, (int, float)):
-                        str_value = str(value)
-                    elif isinstance(value, str):
-                        str_value = value
-                    elif isinstance(value, list):
-                        str_items = []
-                        for item in value:
-                            if isinstance(item, (str, int, float, bool)):
-                                str_items.append(str(item))
-                        str_value = ",".join(str_items)
-                    else:
-                        continue
-                    
-                    safe_key = re.sub(r'[\[\];#=\n]', '_', key)
-                    safe_value = re.sub(r'[\[\];#=\n]', '_', str_value)
-                    
-                    safe_key = re.sub(r'[^\x00-\x7F]', '_', safe_key)
-                    safe_value = re.sub(r'[^\x00-\x7F]', '_', safe_value)
-                    
-                    lines.append(f"{safe_key}={safe_value}")
+            lines = []
+            for key, value in dictParam.items():
+                if isinstance(value, dict):
+                    # Ignora dizionari annidati in formato "ini"
+                    continue
                 
-                sOutput = "\n".join(lines)
-            except Exception as e:
-                sResult = str(e)
-                sOutput = ""
+                # Converte valore in stringa sicura
+                str_value = _value_to_ini_string(value)
+                
+                # Rimuovi caratteri speciali dalla chiave
+                safe_key = _make_ini_safe(key)
+                
+                lines.append(f"{safe_key}={str_value}")
+            
+            sOutput = "\n".join(lines)
         
         elif sFormat == "ini.sect":
-            try:
-                lines = []
-                for key, value in dictParam.items():
-                    if isinstance(value, dict):
-                        lines.append(f"[{key}]")
-                        for subkey, subvalue in value.items():
-                            if isinstance(subvalue, dict):
-                                continue
-                            
-                            str_value = ""
-                            if subvalue is None:
-                                str_value = ""
-                            elif isinstance(subvalue, bool):
-                                str_value = "true" if subvalue else "false"
-                            elif isinstance(subvalue, (int, float)):
-                                str_value = str(subvalue)
-                            elif isinstance(subvalue, str):
-                                str_value = subvalue
-                            elif isinstance(subvalue, list):
-                                str_items = []
-                                for item in subvalue:
-                                    if isinstance(item, (str, int, float, bool)):
-                                        str_items.append(str(item))
-                                str_value = ",".join(str_items)
-                            else:
-                                continue
-                            
-                            safe_key = re.sub(r'[\[\];#=\n]', '_', subkey)
-                            safe_value = re.sub(r'[\[\];#=\n]', '_', str_value)
-                            
-                            safe_key = re.sub(r'[^\x00-\x7F]', '_', safe_key)
-                            safe_value = re.sub(r'[^\x00-\x7F]', '_', safe_value)
-                            
-                            lines.append(f"{safe_key}={safe_value}")
-                        lines.append("")
-                    else:
-                        lines.append(f"{key}={value}")
+            lines = []
+            for key, value in dictParam.items():
+                safe_key = _make_ini_safe(key)
                 
-                sOutput = "\n".join(lines).strip()
-            except Exception as e:
-                sResult = str(e)
-                sOutput = ""
+                if isinstance(value, dict):
+                    # Sezione
+                    lines.append(f"[{safe_key}]")
+                    for sub_key, sub_value in value.items():
+                        safe_sub_key = _make_ini_safe(sub_key)
+                        str_value = _value_to_ini_string(sub_value)
+                        lines.append(f"{safe_sub_key}={str_value}")
+                    lines.append("")  # Linea vuota tra sezioni
+                else:
+                    # Valore di primo livello
+                    str_value = _value_to_ini_string(value)
+                    lines.append(f"{safe_key}={str_value}")
+            
+            sOutput = "\n".join(lines).strip()
         
         else:
             sResult = f"Formato non supportato: {sFormat}"
-            sOutput = ""
         
-        return (loc_aiErrorProc(sResult, sProc), sOutput)
+        return (loc_ErrorProc(sResult, sProc), sOutput)
         
     except Exception as e:
-        return (loc_aiErrorProc(str(e), sProc), "")
+        return (loc_ErrorProc(str(e), sProc), "")
+
+
+def _make_ini_safe(s: str) -> str:
+    """Rende una stringa sicura per formato INI."""
+    if not s:
+        return ""
+    
+    # Rimuovi caratteri speciali INI
+    special_chars = ['[', ']', ';', '#', '\n', '=', '%']
+    result = s
+    for char in special_chars:
+        result = result.replace(char, '_')
+    
+    # Converti caratteri non ASCII in underscore
+    result = ''.join(c if ord(c) < 128 else '_' for c in result)
+    
+    return result
+
+
+def _value_to_ini_string(value: Any) -> str:
+    """Converte un valore in stringa sicura per INI."""
+    if value is None:
+        return ""
+    elif isinstance(value, bool):
+        return "true" if value else "false"
+    elif isinstance(value, (int, float)):
+        return str(value)
+    elif isinstance(value, list):
+        # Converte lista in stringa separata da virgole
+        items = []
+        for item in value:
+            if isinstance(item, (str, int, float, bool)):
+                items.append(str(item))
+            else:
+                items.append("")
+        return ",".join(items)
+    elif isinstance(value, str):
+        # Rimuovi caratteri speciali e newline
+        safe = value.replace('\n', ' ').replace('\r', ' ')
+        special_chars = ['[', ']', ';', '#', '=', '%']
+        for char in special_chars:
+            safe = safe.replace(char, '_')
+        # Converti caratteri non ASCII
+        safe = ''.join(c if ord(c) < 128 else '_' for c in safe)
+        return safe
+    else:
+        return ""
 
 

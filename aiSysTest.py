@@ -1,733 +1,771 @@
-"""
-aiSysTest.py - Test completo di tutte le funzioni del modulo aiSys
-"""
 
-import sys
+"""Test per tutte le funzioni aiSys"""
 import os
-import json
+import sys
 import tempfile
 import shutil
-from typing import Dict, List, Any, Tuple
-from datetime import datetime
+from typing import Dict, Any, List, Tuple
 
-# =============================================================================
-# IMPORT DEL MODULO DA TESTARE
-# =============================================================================
-
-try:
-    import aiSys
-except ImportError as e:
-    print(f"ERRORE: Impossibile importare aiSys - {str(e)}")
-    print("Assicurati che tutti i moduli aiSys*.py siano nella stessa directory.")
-    sys.exit(1)
+# Importa il modulo aiSys
+import aiSys
 
 
-# =============================================================================
-# CLASSE PER GESTIONE TEST
-# =============================================================================
-
-class TestManager:
-    """Gestisce l'esecuzione e il reporting dei test."""
+def run_tests() -> None:
+    """Esegue tutti i test"""
+    total_tests = 0
+    passed_tests = 0
+    failed_tests = []
     
-    def __init__(self):
-        self.total_tests = 0
-        self.passed_tests = 0
-        self.failed_tests = 0
-        self.test_details = []
-        self.failed_asserts = []
-        self.current_test_num = 0
-        self.current_assert_num = 0
-        
-    def start_test(self, test_num: int, module_name: str, test_name: str):
-        """Inizia un nuovo test."""
-        self.current_test_num = test_num
-        self.current_assert_num = 0
-        print(f"\n{'='*60}")
-        print(f"Test: {test_num:03d} | File: {module_name} | NomeTest: {test_name}")
-        print(f"{'='*60}")
-        
-    def assert_test(self, condition: bool, description: str, expected: Any = None, actual: Any = None):
-        """Esegue un assert e registra il risultato."""
-        self.current_assert_num += 1
-        assert_id = f"Test{self.current_test_num:03d}_Assert{self.current_assert_num:03d}"
-        
-        if condition:
-            print(f"  ✓ {assert_id}: {description}")
-            return True
-        else:
-            print(f"  ✗ {assert_id}: {description}")
-            if expected is not None and actual is not None:
-                print(f"     Expected: {expected}")
-                print(f"     Actual: {actual}")
-            
-            # Registra l'assert fallito
-            self.failed_asserts.append({
-                'test_num': self.current_test_num,
-                'assert_num': self.current_assert_num,
-                'assert_id': assert_id,
-                'description': description,
-                'expected': expected,
-                'actual': actual
-            })
-            return False
-            
-    def end_test(self, test_passed: bool):
-        """Termina un test e aggiorna le statistiche."""
-        self.total_tests += 1
-        if test_passed:
-            self.passed_tests += 1
-            print(f"  → Test {self.current_test_num:03d}: PASSATO")
-        else:
-            self.failed_tests += 1
-            print(f"  → Test {self.current_test_num:03d}: FALLITO")
-            
-    def print_summary(self):
-        """Stampa il riepilogo dei test."""
-        print(f"\n{'='*60}")
-        print("RIEPILOGO TEST")
-        print(f"{'='*60}")
-        print(f"Test totali:    {self.total_tests}")
-        print(f"Test passati:   {self.passed_tests}")
-        print(f"Test falliti:   {self.failed_tests}")
-        print(f"Assert falliti: {len(self.failed_asserts)}")
-        
-        if self.failed_tests > 0:
-            print(f"\n{'='*60}")
-            print("DETTAGLIO TEST FALLITI:")
-            print(f"{'='*60}")
-            
-            # Raggruppa gli assert falliti per test
-            failed_tests_dict = {}
-            for failed_assert in self.failed_asserts:
-                test_num = failed_assert['test_num']
-                if test_num not in failed_tests_dict:
-                    failed_tests_dict[test_num] = []
-                failed_tests_dict[test_num].append(failed_assert)
-            
-            # Stampa i dettagli per ogni test fallito
-            for test_num in sorted(failed_tests_dict.keys()):
-                print(f"\nTest {test_num:03d}:")
-                for failed_assert in failed_tests_dict[test_num]:
-                    print(f"  {failed_assert['assert_id']}: {failed_assert['description']}")
-                    if failed_assert['expected'] is not None:
-                        print(f"    Expected: {failed_assert['expected']}")
-                    if failed_assert['actual'] is not None:
-                        print(f"    Actual:   {failed_assert['actual']}")
+    print("=" * 60)
+    print("INIZIO TEST MODULO aiSys")
+    print("=" * 60)
+    
+    # Test 1: aiSysBase
+    total_tests += 1
+    if test_aiSysBase():
+        passed_tests += 1
+        print(f"✓ Test {total_tests} passato: aiSysBase.py")
+    else:
+        failed_tests.append(f"Test {total_tests}: aiSysBase.py")
+    
+    # Test 2: aiSysTimestamp
+    total_tests += 1
+    if test_aiSysTimestamp():
+        passed_tests += 1
+        print(f"✓ Test {total_tests} passato: aiSysTimestamp.py")
+    else:
+        failed_tests.append(f"Test {total_tests}: aiSysTimestamp.py")
+    
+    # Test 3: aiSysConfig (Expand e ExpandDict)
+    total_tests += 1
+    if test_aiSysConfig():
+        passed_tests += 1
+        print(f"✓ Test {total_tests} passato: aiSysConfig.py")
+    else:
+        failed_tests.append(f"Test {total_tests}: aiSysConfig.py")
+    
+    # Test 4: aiSysFileio
+    total_tests += 1
+    if test_aiSysFileio():
+        passed_tests += 1
+        print(f"✓ Test {total_tests} passato: aiSysFileio.py")
+    else:
+        failed_tests.append(f"Test {total_tests}: aiSysFileio.py")
+    
+    # Test 5: aiSysStrings
+    total_tests += 1
+    if test_aiSysStrings():
+        passed_tests += 1
+        print(f"✓ Test {total_tests} passato: aiSysStrings.py")
+    else:
+        failed_tests.append(f"Test {total_tests}: aiSysStrings.py")
+    
+    # Test 6: aiSysDictToString
+    total_tests += 1
+    if test_aiSysDictToString():
+        passed_tests += 1
+        print(f"✓ Test {total_tests} passato: aiSysDictToString.py")
+    else:
+        failed_tests.append(f"Test {total_tests}: aiSysDictToString.py")
+    
+    # Test 7: aiSysLog (acLog)
+    total_tests += 1
+    if test_aiSysLog():
+        passed_tests += 1
+        print(f"✓ Test {total_tests} passato: aiSysLog.py")
+    else:
+        failed_tests.append(f"Test {total_tests}: aiSysLog.py")
+    
+    # Test 8: Integrazione
+    total_tests += 1
+    if test_integration():
+        passed_tests += 1
+        print(f"✓ Test {total_tests} passato: Integrazione")
+    else:
+        failed_tests.append(f"Test {total_tests}: Integrazione")
+    
+    # Riepilogo
+    print("\n" + "=" * 60)
+    print("RIEPILOGO TEST")
+    print("=" * 60)
+    print(f"Test totali: {total_tests}")
+    print(f"Test passati: {passed_tests}")
+    print(f"Test falliti: {total_tests - passed_tests}")
+    
+    if failed_tests:
+        print("\nTest falliti in dettaglio:")
+        for failed in failed_tests:
+            print(f"  - {failed}")
+    
+    print("=" * 60)
 
 
-# =============================================================================
-# FUNZIONI DI SUPPORTO PER TEST
-# =============================================================================
-
-def create_temp_file(content: str = "", extension: str = ".txt") -> str:
-    """Crea un file temporaneo con il contenuto specificato."""
-    temp_dir = tempfile.mkdtemp()
-    temp_file = os.path.join(temp_dir, f"test{extension}")
-    if content:
-        with open(temp_file, 'w', encoding='utf-8') as f:
-            f.write(content)
-    return temp_file, temp_dir
-
-
-def cleanup_temp_files(file_path: str, dir_path: str = None):
-    """Pulisce i file temporanei."""
+def test_aiSysBase() -> bool:
+    """Test per aiSysBase.py"""
+    print("\n" + "=" * 60)
+    print("Test 1: File aiSysBase.py, NomeTest: Funzioni base")
+    print("=" * 60)
+    
+    test_passed = True
+    test_num = 1
+    
     try:
-        if os.path.exists(file_path):
-            os.remove(file_path)
-        if dir_path and os.path.exists(dir_path):
-            shutil.rmtree(dir_path)
-    except:
-        pass
-
-
-# =============================================================================
-# FUNZIONI DI TEST
-# =============================================================================
-
-def test_aiSysBase(test_mgr: TestManager) -> bool:
-    """Test delle funzioni di aiSysBase.py"""
-    test_passed = True
-    
-    # Test 001: aiErrorProc
-    test_mgr.start_test(1, "aiSysBase.py", "aiErrorProc")
-    
-    # Assert 001_001
-    result = aiSys.aiErrorProc("", "test_func")
-    condition = test_mgr.assert_test(
-        result == "",
-        "aiErrorProc con sResult vuoto deve ritornare stringa vuota",
-        "", result
-    )
-    test_passed = test_passed and condition
-    
-    # Assert 001_002
-    result = aiSys.aiErrorProc("errore_123", "test_func")
-    expected = "test_func: Errore errore_123"
-    condition = test_mgr.assert_test(
-        result == expected,
-        "aiErrorProc con sResult non vuoto deve aggiungere prefisso",
-        expected, result
-    )
-    test_passed = test_passed and condition
-    
-    test_mgr.end_test(test_passed)
-    
-    # Test 002: DictMerge
-    test_mgr.start_test(2, "aiSysBase.py", "DictMerge")
-    test_passed_2 = True
-    
-    dict1 = {"a": 1, "b": 2}
-    dict2 = {"b": 3, "c": 4}
-    
-    # Assert 002_001
-    result = aiSys.DictMerge(dict1, dict2)
-    expected = {"a": 1, "b": 3, "c": 4}
-    condition = test_mgr.assert_test(
-        result == expected,
-        "DictMerge deve unire dizionari con priorità a dictAdd",
-        expected, result
-    )
-    test_passed_2 = test_passed_2 and condition
-    
-    # Assert 002_002
-    result = aiSys.DictMerge(None, dict2)
-    condition = test_mgr.assert_test(
-        result == dict2,
-        "DictMerge con dictSource=None deve ritornare dictAdd",
-        dict2, result
-    )
-    test_passed_2 = test_passed_2 and condition
-    
-    test_mgr.end_test(test_passed_2)
-    test_passed = test_passed and test_passed_2
-    
-    # Test 003: DictExist
-    test_mgr.start_test(3, "aiSysBase.py", "DictExist")
-    test_passed_3 = True
-    
-    test_dict = {"chiave1": "valore1", "chiave2": 42}
-    
-    # Assert 003_001
-    result = aiSys.DictExist(test_dict, "chiave1", "default")
-    condition = test_mgr.assert_test(
-        result == "valore1",
-        "DictExist deve ritornare valore esistente",
-        "valore1", result
-    )
-    test_passed_3 = test_passed_3 and condition
-    
-    # Assert 003_002
-    result = aiSys.DictExist(test_dict, "chiave_inesistente", "valore_default")
-    condition = test_mgr.assert_test(
-        result == "valore_default",
-        "DictExist deve ritornare valore default per chiavi inesistenti",
-        "valore_default", result
-    )
-    test_passed_3 = test_passed_3 and condition
-    
-    # Assert 003_003
-    result = aiSys.DictExist("non_un_dict", "chiave", "default")
-    condition = test_mgr.assert_test(
-        result is None,
-        "DictExist con parametro non dizionario deve ritornare None",
-        None, result
-    )
-    test_passed_3 = test_passed_3 and condition
-    
-    test_mgr.end_test(test_passed_3)
-    test_passed = test_passed and test_passed_3
+        # Test 1.1: ErrorProc
+        print(f"\nTest {test_num}.1: ErrorProc")
+        print(f"  Input: sResult='Errore test', sProc='TestFunction'")
+        result = aiSys.ErrorProc("Errore test", "TestFunction")
+        print(f"  Output: {result}")
+        assert ": Errore Errore test" in result, "Formato errore errato"
+        test_num += 1
+        
+        # Test 1.2: ErrorProc con stringa vuota
+        print(f"\nTest {test_num}.1: ErrorProc con stringa vuota")
+        print(f"  Input: sResult='', sProc='TestFunction'")
+        result = aiSys.ErrorProc("", "TestFunction")
+        print(f"  Output: {result}")
+        assert result == "", "Dovrebbe ritornare stringa vuota"
+        test_num += 1
+        
+        # Test 1.3: DictMerge
+        print(f"\nTest {test_num}.1: DictMerge")
+        dict1 = {"a": 1, "b": 2}
+        dict2 = {"b": 3, "c": 4}
+        print(f"  Input: dictSource={dict1}, dictAdd={dict2}")
+        aiSys.DictMerge(dict1, dict2)
+        print(f"  Output: {dict1}")
+        assert dict1 == {"a": 1, "b": 3, "c": 4}, "Merge non corretto"
+        test_num += 1
+        
+        # Test 1.4: DictExist
+        print(f"\nTest {test_num}.1: DictExist")
+        test_dict = {"key1": "value1", "key2": 123}
+        print(f"  Input: dictParam={test_dict}, sKey='key1', xDefault='default'")
+        result = aiSys.DictExist(test_dict, "key1", "default")
+        print(f"  Output: {result}")
+        assert result == "value1", "Valore chiave errato"
+        
+        print(f"\nTest {test_num}.2: DictExist chiave inesistente")
+        print(f"  Input: dictParam={test_dict}, sKey='key3', xDefault='default'")
+        result = aiSys.DictExist(test_dict, "key3", "default")
+        print(f"  Output: {result}")
+        assert result == "default", "Default non restituito"
+        test_num += 1
+        
+    except AssertionError as e:
+        print(f"  ❌ Assert fallito: {e}")
+        test_passed = False
+    except Exception as e:
+        print(f"  ❌ Errore durante il test: {e}")
+        test_passed = False
     
     return test_passed
 
 
-def test_aiSysTimestamp(test_mgr: TestManager) -> bool:
-    """Test delle funzioni di timestamp."""
+def test_aiSysTimestamp() -> bool:
+    """Test per aiSysTimestamp.py"""
+    print("\n" + "=" * 60)
+    print("Test 2: File aiSysTimestamp.py, NomeTest: Funzioni timestamp")
+    print("=" * 60)
+    
     test_passed = True
+    test_num = 1
     
-    # Test 004: Timestamp
-    test_mgr.start_test(4, "aiSysTimestamp.py", "Timestamp")
-    test_passed_4 = True
-    
-    # Assert 004_001
-    result = aiSys.Timestamp()
-    condition = test_mgr.assert_test(
-        len(result) >= 15,
-        "Timestamp() deve generare stringa di almeno 15 caratteri",
-        "len >= 15", f"len={len(result)}"
-    )
-    test_passed_4 = test_passed_4 and condition
-    
-    # Assert 004_002
-    result = aiSys.Timestamp("test")
-    condition = test_mgr.assert_test(
-        ":" in result and result.count(":") >= 2,
-        "Timestamp con postfix deve contenere due ':'",
-        True, ":" in result and result.count(":") >= 2
-    )
-    test_passed_4 = test_passed_4 and condition
-    
-    test_mgr.end_test(test_passed_4)
-    test_passed = test_passed and test_passed_4
-    
-    # Test 005: TimestampValidate
-    test_mgr.start_test(5, "aiSysTimestamp.py", "TimestampValidate")
-    test_passed_5 = True
-    
-    valid_ts = datetime.now().strftime("%Y%m%d:%H%M%S")
-    
-    # Assert 005_001
-    result = aiSys.TimestampValidate(valid_ts)
-    condition = test_mgr.assert_test(
-        result == True,
-        "TimestampValidate con timestamp valido deve ritornare True",
-        True, result
-    )
-    test_passed_5 = test_passed_5 and condition
-    
-    # Assert 005_002
-    result = aiSys.TimestampValidate("20241301:120000")  # Mese 13
-    condition = test_mgr.assert_test(
-        result == False,
-        "TimestampValidate con mese non valido deve ritornare False",
-        False, result
-    )
-    test_passed_5 = test_passed_5 and condition
-    
-    test_mgr.end_test(test_passed_5)
-    test_passed = test_passed and test_passed_5
+    try:
+        # Test 2.1: Timestamp base
+        print(f"\nTest {test_num}.1: Timestamp()")
+        result = aiSys.Timestamp()
+        print(f"  Output: {result}")
+        assert len(result) == 15, "Lunghezza timestamp errata"
+        assert ":" in result, "Formato timestamp errato"
+        test_num += 1
+        
+        # Test 2.2: Timestamp con postfix
+        print(f"\nTest {test_num}.1: Timestamp con postfix")
+        result = aiSys.Timestamp("Test")
+        print(f"  Output: {result}")
+        assert result.endswith(":test"), "Postfix non aggiunto correttamente"
+        test_num += 1
+        
+        # Test 2.3: TimestampValidate
+        print(f"\nTest {test_num}.1: TimestampValidate valido")
+        valid_ts = "20240125:143055"
+        print(f"  Input: {valid_ts}")
+        result = aiSys.TimestampValidate(valid_ts)
+        print(f"  Output: {result}")
+        assert result == True, "Timestamp valido non riconosciuto"
+        
+        print(f"\nTest {test_num}.2: TimestampValidate non valido")
+        invalid_ts = "20240125:1430"
+        print(f"  Input: {invalid_ts}")
+        result = aiSys.TimestampValidate(invalid_ts)
+        print(f"  Output: {result}")
+        assert result == False, "Timestamp non valido riconosciuto come valido"
+        test_num += 1
+        
+        # Test 2.4: TimestampConvert e TimestampFromSeconds (ciclo completo)
+        print(f"\nTest {test_num}.1: Ciclo Timestamp ↔ Secondi")
+        ts1 = aiSys.Timestamp()
+        print(f"  Timestamp originale: {ts1}")
+        seconds = aiSys.TimestampConvert(ts1, "s")
+        print(f"  Convertito in secondi: {seconds}")
+        ts2 = aiSys.TimestampFromSeconds(seconds)
+        print(f"  Ricostruito: {ts2}")
+        
+        # Estrai parte timestamp (senza eventuale postfix)
+        ts1_base = ts1.split(':')[0] + ':' + ts1.split(':')[1] if ':' in ts1 else ts1
+        assert ts1_base == ts2, "Ciclo conversione non funziona"
+        test_num += 1
+        
+        # Test 2.5: TimestampDiff
+        print(f"\nTest {test_num}.1: TimestampDiff")
+        ts1 = "20240125:120000"
+        ts2 = "20240125:120100"
+        print(f"  Input: {ts1}, {ts2}, sMode='s'")
+        diff = aiSys.TimestampDiff(ts1, ts2, "s")
+        print(f"  Output: {diff}")
+        assert diff == 60, "Differenza in secondi errata"
+        test_num += 1
+        
+        # Test 2.6: TimestampAdd
+        print(f"\nTest {test_num}.1: TimestampAdd")
+        ts = "20240125:120000"
+        print(f"  Input: {ts}, nValue=60, sUnit='s'")
+        result = aiSys.TimestampAdd(ts, 60, "s")
+        print(f"  Output: {result}")
+        assert result == "20240125:120100", "Aggiunta secondi errata"
+        
+    except AssertionError as e:
+        print(f"  ❌ Assert fallito: {e}")
+        test_passed = False
+    except Exception as e:
+        print(f"  ❌ Errore durante il test: {e}")
+        test_passed = False
     
     return test_passed
 
 
-def test_aiSysConfig(test_mgr: TestManager) -> bool:
-    """Test delle funzioni di configurazione."""
+def test_aiSysConfig() -> bool:
+    """Test per aiSysConfig.py (con focus su Expand e ExpandDict)"""
+    print("\n" + "=" * 60)
+    print("Test 3: File aiSysConfig.py, NomeTest: Expand e ExpandDict")
+    print("=" * 60)
+    
     test_passed = True
+    test_num = 1
     
-    # Test 006: Expand
-    test_mgr.start_test(6, "aiSysConfig.py", "Expand")
-    test_passed_6 = True
-    
-    dict_config = {"USER": "Mario", "VAR": "valore"}
-    
-    # Assert 006_001
-    result = aiSys.Expand("Ciao $USER", dict_config)
-    condition = test_mgr.assert_test(
-        result == "Ciao Mario",
-        "Expand deve sostituire variabile $USER",
-        "Ciao Mario", result
-    )
-    test_passed_6 = test_passed_6 and condition
-    
-    # Assert 006_002 - Test sequenze di escape
-    result = aiSys.Expand("Testo%nnuova riga", dict_config)
-    condition = test_mgr.assert_test(
-        "\n" in result,
-        "Expand deve convertire %n in newline",
-        True, "\n" in result
-    )
-    test_passed_6 = test_passed_6 and condition
-    
-    # Assert 006_003 - Test variabile inesistente
-    result = aiSys.Expand("Variabile $INESISTENTE", dict_config)
-    condition = test_mgr.assert_test(
-        result == "Variabile UNKNOWN",
-        "Expand deve sostituire variabili inesistenti con UNKNOWN",
-        "Variabile UNKNOWN", result
-    )
-    test_passed_6 = test_passed_6 and condition
-    
-    # Assert 006_004 - Test escape speciale
-    result = aiSys.Expand("%$VAR", dict_config)
-    condition = test_mgr.assert_test(
-        result == "valore",
-        "Expand deve gestire %$ come escape per $",
-        "valore", result
-    )
-    test_passed_6 = test_passed_6 and condition
-    
-    test_mgr.end_test(test_passed_6)
-    test_passed = test_passed and test_passed_6
-    
-    # Test 007: ExpandDict
-    test_mgr.start_test(7, "aiSysConfig.py", "ExpandDict")
-    test_passed_7 = True
-    
-    dict_to_expand = {
-        "msg1": "Ciao $USER",
-        "msg2": "Test %n nuova riga",
-        "nested": {
-            "sub": "Valore: $VAR"
+    try:
+        # Test 3.1: Expand - sequenze di escape
+        print(f"\nTest {test_num}.1: Expand sequenze di escape")
+        dictConfig = {"USER": "Mario"}
+        test_str = "Ciao %% USER %n Test%#citazione%# %$dollaro %\\backslash"
+        print(f"  Input: sText='{test_str}', dictConfig={dictConfig}")
+        result = aiSys.Expand(test_str, dictConfig)
+        print(f"  Output: {repr(result)}")
+        assert "%" not in result or "%%" not in result, "Escape % non gestito"
+        assert "\n" in result, "Escape %n non gestito"
+        test_num += 1
+        
+        # Test 3.2: Expand - variabili
+        print(f"\nTest {test_num}.1: Expand variabili")
+        dictConfig = {"USER": "Mario", "LIVELLO": "admin"}
+        test_str = "Ciao $USER, livello: $LIVELLO"
+        print(f"  Input: sText='{test_str}', dictConfig={dictConfig}")
+        result = aiSys.Expand(test_str, dictConfig)
+        print(f"  Output: {result}")
+        assert "Mario" in result, "Variabile USER non espansa"
+        assert "admin" in result, "Variabile LIVELLO non espansa"
+        
+        print(f"\nTest {test_num}.2: Expand variabile inesistente")
+        test_str = "Ciao $UTENTE_SCONOSCIUTO"
+        print(f"  Input: sText='{test_str}', dictConfig={dictConfig}")
+        result = aiSys.Expand(test_str, dictConfig)
+        print(f"  Output: {result}")
+        assert "UNKNOWN" in result, "Variabile inesistente non gestita"
+        test_num += 1
+        
+        # Test 3.3: ExpandConvert (inversa)
+        print(f"\nTest {test_num}.1: ExpandConvert")
+        test_str = 'Test "citazione"\nNuova riga $variabile\\escape'
+        print(f"  Input: '{test_str}'")
+        converted = aiSys.ExpandConvert(test_str)
+        print(f"  Convertito: {repr(converted)}")
+        # Test ciclo completo
+        dictConfig = {"variabile": "valore"}
+        expanded = aiSys.Expand(converted, dictConfig)
+        print(f"  Riconvertito: {repr(expanded)}")
+        assert 'citazione' in expanded, "Ciclo conversione non funziona"
+        test_num += 1
+        
+        # Test 3.4: ExpandDict
+        print(f"\nTest {test_num}.1: ExpandDict")
+        dictExpand = {
+            "msg1": "Ciao $USER",
+            "msg2": "Test%n nuova riga",
+            "nested": {
+                "msg3": "Variabile $LEVEL"
+            }
         }
-    }
-    
-    # Assert 007_001
-    result = aiSys.ExpandDict(dict_to_expand, dict_config)
-    condition = test_mgr.assert_test(
-        isinstance(result, dict),
-        "ExpandDict deve ritornare un dizionario",
-        True, isinstance(result, dict)
-    )
-    test_passed_7 = test_passed_7 and condition
-    
-    # Assert 007_002
-    condition = test_mgr.assert_test(
-        result.get("msg1") == "Ciao Mario",
-        "ExpandDict deve espandere valori nel dizionario",
-        "Ciao Mario", result.get("msg1")
-    )
-    test_passed_7 = test_passed_7 and condition
-    
-    test_mgr.end_test(test_passed_7)
-    test_passed = test_passed and test_passed_7
-    
-    # Test 008: Config e ConfigDefault
-    test_mgr.start_test(8, "aiSysConfig.py", "Config e ConfigDefault")
-    test_passed_8 = True
-    
-    config_dict = {"chiave1": "valore1", "chiave2": ""}
-    
-    # Assert 008_001 - Config lettura esistente
-    result = aiSys.Config(config_dict, "chiave1")
-    condition = test_mgr.assert_test(
-        result == "valore1",
-        "Config deve leggere valore esistente",
-        "valore1", result
-    )
-    test_passed_8 = test_passed_8 and condition
-    
-    # Assert 008_002 - Config lettura inesistente
-    result = aiSys.Config(config_dict, "chiave_inesistente")
-    condition = test_mgr.assert_test(
-        result == "",
-        "Config per chiave inesistente deve ritornare stringa vuota",
-        "", result
-    )
-    test_passed_8 = test_passed_8 and condition
-    
-    # Assert 008_003 - ConfigDefault
-    result_dict = config_dict.copy()
-    aiSys.ConfigDefault("chiave2", "nuovo_valore", result_dict)
-    condition = test_mgr.assert_test(
-        result_dict["chiave2"] == "nuovo_valore",
-        "ConfigDefault deve impostare valore se vuoto",
-        "nuovo_valore", result_dict["chiave2"]
-    )
-    test_passed_8 = test_passed_8 and condition
-    
-    # Assert 008_004 - ConfigDefault non sovrascrive
-    aiSys.ConfigDefault("chiave1", "non_dovrebbe", result_dict)
-    condition = test_mgr.assert_test(
-        result_dict["chiave1"] == "valore1",
-        "ConfigDefault non deve sovrascrivere valori esistenti non vuoti",
-        "valore1", result_dict["chiave1"]
-    )
-    test_passed_8 = test_passed_8 and condition
-    
-    test_mgr.end_test(test_passed_8)
-    test_passed = test_passed and test_passed_8
+        dictParam = {"USER": "Mario", "LEVEL": "alto"}
+        print(f"  Input: dictExpand={dictExpand}, dictParam={dictParam}")
+        result = aiSys.ExpandDict(dictExpand, dictParam)
+        print(f"  Output: {result}")
+        assert "Mario" in result["msg1"], "Variabile non espansa nel dizionario"
+        assert "\n" in result["msg2"], "Escape non espanso nel dizionario"
+        assert "alto" in result["nested"]["msg3"], "Nested dict non espanso"
+        test_num += 1
+        
+        # Test 3.5: Config e ConfigDefault
+        print(f"\nTest {test_num}.1: Config e ConfigDefault")
+        config_dict = {"key1": "value1", "key2": ""}
+        print(f"  Dict iniziale: {config_dict}")
+        
+        # ConfigDefault con chiave vuota
+        aiSys.ConfigDefault("key2", "default2", config_dict)
+        print(f"  Dopo ConfigDefault key2: {config_dict}")
+        assert config_dict["key2"] == "default2", "ConfigDefault non ha impostato valore vuoto"
+        
+        # ConfigDefault con chiave inesistente
+        aiSys.ConfigDefault("key3", "value3", config_dict)
+        print(f"  Dopo ConfigDefault key3: {config_dict}")
+        assert config_dict["key3"] == "value3", "ConfigDefault non ha aggiunto chiave"
+        
+        # Config lettura
+        value = aiSys.Config(config_dict, "key1")
+        print(f"  Config read key1: {value}")
+        assert value == "value1", "Config non legge correttamente"
+        test_num += 1
+        
+    except AssertionError as e:
+        print(f"  ❌ Assert fallito: {e}")
+        test_passed = False
+    except Exception as e:
+        print(f"  ❌ Errore durante il test: {e}")
+        test_passed = False
     
     return test_passed
 
 
-def test_aiSysFileio(test_mgr: TestManager) -> bool:
-    """Test delle funzioni di file I/O."""
+def test_aiSysFileio() -> bool:
+    """Test per aiSysFileio.py"""
+    print("\n" + "=" * 60)
+    print("Test 4: File aiSysFileio.py, NomeTest: Operazioni file")
+    print("=" * 60)
+    
     test_passed = True
+    test_num = 1
     
-    # Test 009: read_csv_to_dict e save_array_file
-    test_mgr.start_test(9, "aiSysFileio.py", "read_csv_to_dict e save_array_file")
-    test_passed_9 = True
-    
-    # Crea file CSV temporaneo
-    csv_content = """ID;Nome;Eta
-1;Mario;30
-2;Luigi;25
-3;Peach;28"""
-    
-    csv_file, csv_dir = create_temp_file(csv_content, ".csv")
+    # Crea file temporanei
+    temp_dir = tempfile.mkdtemp()
     
     try:
-        # Assert 009_001 - Lettura CSV
-        result = aiSys.read_csv_to_dict(csv_file, ["ID", "Nome", "Eta"], ";")
-        condition = test_mgr.assert_test(
-            isinstance(result, tuple) and len(result) == 2,
-            "read_csv_to_dict deve ritornare tupla (sResult, dict)",
-            "tuple len=2", f"{type(result)} len={len(result) if isinstance(result, tuple) else 'N/A'}"
-        )
-        test_passed_9 = test_passed_9 and condition
+        # Test 4.1: save_array_file e read_array_file
+        print(f"\nTest {test_num}.1: save_array_file e read_array_file")
+        test_file = os.path.join(temp_dir, "test_array.txt")
+        test_lines = ["Linea 1", "Linea 2", "Linea 3"]
+        print(f"  Input: sFile='{test_file}', asLines={test_lines}")
         
-        if condition and len(result) == 2:
-            sResult, data_dict = result
-            condition = test_mgr.assert_test(
-                sResult == "" and len(data_dict) == 3,
-                "read_csv_to_dict deve leggere 3 record correttamente",
-                "sResult='', len=3", f"sResult='{sResult}', len={len(data_dict)}"
-            )
-            test_passed_9 = test_passed_9 and condition
-    
+        # Salva
+        result_save = aiSys.save_array_file(test_file, test_lines)
+        print(f"  save_array_file risultato: {result_save}")
+        assert result_save == "", f"Errore salvataggio: {result_save}"
+        
+        # Leggi
+        result_read, lines_read = aiSys.read_array_file(test_file)
+        print(f"  read_array_file risultato: {result_read}, lines: {lines_read}")
+        assert result_read == "", f"Errore lettura: {result_read}"
+        assert lines_read == test_lines, "Linee lette non corrispondono"
+        test_num += 1
+        
+        # Test 4.2: save_dict_to_ini e read_ini_to_dict
+        print(f"\nTest {test_num}.1: save_dict_to_ini e read_ini_to_dict")
+        ini_file = os.path.join(temp_dir, "test.ini")
+        test_dict = {
+            "sezione1": {"chiave1": "valore1", "chiave2": "valore2"},
+            "sezione2": {"chiaveA": "valoreA"}
+        }
+        print(f"  Input: data_dict={test_dict}, ini_file_path='{ini_file}'")
+        
+        # Salva INI
+        result_save = aiSys.save_dict_to_ini(test_dict, ini_file)
+        print(f"  save_dict_to_ini risultato: {result_save}")
+        assert result_save == "", f"Errore salvataggio INI: {result_save}"
+        
+        # Leggi INI
+        result_read, dict_read = aiSys.read_ini_to_dict(ini_file)
+        print(f"  read_ini_to_dict risultato: {result_read}")
+        print(f"  Dict letto: {dict_read}")
+        assert result_read == "", f"Errore lettura INI: {result_read}"
+        assert dict_read == test_dict, "Dizionario letto non corrisponde"
+        test_num += 1
+        
+        # Test 4.3: isValidPath e isFilename
+        print(f"\nTest {test_num}.1: isValidPath")
+        print(f"  Input: sPath='{temp_dir}'")
+        result = aiSys.isValidPath(temp_dir)
+        print(f"  Output: {result}")
+        assert result == True, "Percorso valido non riconosciuto"
+        
+        print(f"\nTest {test_num}.2: isFilename valido")
+        print(f"  Input: sFilename='test_file.txt'")
+        result = aiSys.isFilename("test_file.txt")
+        print(f"  Output: {result}")
+        assert result == True, "Filename valido non riconosciuto"
+        
+        print(f"\nTest {test_num}.3: isFilename non valido")
+        print(f"  Input: sFilename='file\\con\\path.txt'")
+        result = aiSys.isFilename("file\\con\\path.txt")
+        print(f"  Output: {result}")
+        assert result == False, "Filename non valido riconosciuto"
+        test_num += 1
+        
+        # Test 4.4: PathMake
+        print(f"\nTest {test_num}.1: PathMake")
+        print(f"  Input: sPath='{temp_dir}', sFile='test', sExt='txt'")
+        result = aiSys.PathMake(temp_dir, "test", "txt")
+        print(f"  Output: {result}")
+        expected = os.path.join(temp_dir, "test.txt")
+        assert result == expected, f"PathMake errato: atteso {expected}, ottenuto {result}"
+        
+    except AssertionError as e:
+        print(f"  ❌ Assert fallito: {e}")
+        test_passed = False
+    except Exception as e:
+        print(f"  ❌ Errore durante il test: {e}")
+        test_passed = False
     finally:
-        cleanup_temp_files(csv_file, csv_dir)
-    
-    test_mgr.end_test(test_passed_9)
-    test_passed = test_passed and test_passed_9
-    
-    # Test 010: isValidPath e PathMake
-    test_mgr.start_test(10, "aiSysFileio.py", "isValidPath e PathMake")
-    test_passed_10 = True
-    
-    # Assert 010_001 - isValidPath per percorso corrente
-    result = aiSys.isValidPath(".")
-    condition = test_mgr.assert_test(
-        result == True,
-        "isValidPath deve ritornare True per percorso corrente",
-        True, result
-    )
-    test_passed_10 = test_passed_10 and condition
-    
-    # Assert 010_002 - PathMake
-    result = aiSys.PathMake("/tmp", "testfile", "txt")
-    condition = test_mgr.assert_test(
-        result.endswith("/tmp/testfile.txt") or result.endswith("\\tmp\\testfile.txt"),
-        "PathMake deve creare percorso completo",
-        True, result.endswith("/tmp/testfile.txt") or result.endswith("\\tmp\\testfile.txt")
-    )
-    test_passed_10 = test_passed_10 and condition
-    
-    test_mgr.end_test(test_passed_10)
-    test_passed = test_passed and test_passed_10
+        # Pulizia
+        shutil.rmtree(temp_dir, ignore_errors=True)
     
     return test_passed
 
 
-def test_aiSysStrings(test_mgr: TestManager) -> bool:
-    """Test delle funzioni di stringhe."""
+def test_aiSysStrings() -> bool:
+    """Test per aiSysStrings.py"""
+    print("\n" + "=" * 60)
+    print("Test 5: File aiSysStrings.py, NomeTest: Operazioni stringhe")
+    print("=" * 60)
+    
     test_passed = True
-    
-    # Test 011: StringBool
-    test_mgr.start_test(11, "aiSysStrings.py", "StringBool")
-    test_passed_11 = True
-    
-    # Assert 011_001
-    result = aiSys.StringBool("True")
-    condition = test_mgr.assert_test(
-        result == True,
-        "StringBool('True') deve ritornare True",
-        True, result
-    )
-    test_passed_11 = test_passed_11 and condition
-    
-    # Assert 011_002
-    result = aiSys.StringBool("FALSE")
-    condition = test_mgr.assert_test(
-        result == True,
-        "StringBool('FALSE') deve ritornare True (valida booleano)",
-        True, result
-    )
-    test_passed_11 = test_passed_11 and condition
-    
-    # Assert 011_003
-    result = aiSys.StringBool("notabool")
-    condition = test_mgr.assert_test(
-        result == False,
-        "StringBool('notabool') deve ritornare False",
-        False, result
-    )
-    test_passed_11 = test_passed_11 and condition
-    
-    test_mgr.end_test(test_passed_11)
-    test_passed = test_passed and test_passed_11
-    
-    # Test 012: isEmail e isValidPassword
-    test_mgr.start_test(12, "aiSysStrings.py", "isEmail e isValidPassword")
-    test_passed_12 = True
-    
-    # Assert 012_001
-    result = aiSys.isEmail("nome.cognome@gmail.com")
-    condition = test_mgr.assert_test(
-        result == True,
-        "isEmail deve validare email corretta",
-        True, result
-    )
-    test_passed_12 = test_passed_12 and condition
-    
-    # Assert 012_002
-    result = aiSys.isEmail("non-email")
-    condition = test_mgr.assert_test(
-        result == False,
-        "isEmail deve rifiutare stringa non email",
-        False, result
-    )
-    test_passed_12 = test_passed_12 and condition
-    
-    # Assert 012_003
-    result = aiSys.isValidPassword("Pass123!_.")
-    condition = test_mgr.assert_test(
-        result == True,
-        "isValidPassword deve accettare password con caratteri permessi",
-        True, result
-    )
-    test_passed_12 = test_passed_12 and condition
-    
-    test_mgr.end_test(test_passed_12)
-    test_passed = test_passed and test_passed_12
-    
-    return test_passed
-
-
-def test_aiSysDictToString(test_mgr: TestManager) -> bool:
-    """Test delle funzioni di conversione dizionari."""
-    test_passed = True
-    
-    # Test 013: DictToString
-    test_mgr.start_test(13, "aiSysDictToString.py", "DictToString")
-    test_passed_13 = True
-    
-    test_dict = {"nome": "Mario", "età": 30, "attivo": True}
-    
-    # Assert 013_001 - Formato JSON
-    result = aiSys.DictToString(test_dict, "json")
-    condition = test_mgr.assert_test(
-        isinstance(result, tuple) and len(result) == 2,
-        "DictToString deve ritornare tupla (sResult, sOutput)",
-        "tuple len=2", f"{type(result)} len={len(result) if isinstance(result, tuple) else 'N/A'}"
-    )
-    test_passed_13 = test_passed_13 and condition
-    
-    if condition and len(result) == 2:
-        sResult, sOutput = result
-        condition = test_mgr.assert_test(
-            sResult == "" and "Mario" in sOutput,
-            "DictToString JSON deve contenere i dati",
-            "sResult='', output contiene 'Mario'", f"sResult='{sResult}', output={sOutput[:50]}..."
-        )
-        test_passed_13 = test_passed_13 and condition
-    
-    # Assert 013_002 - Formato INI
-    result = aiSys.DictToString(test_dict, "ini")
-    if isinstance(result, tuple) and len(result) == 2:
-        sResult, sOutput = result
-        condition = test_mgr.assert_test(
-            sResult == "" and "Mario" in sOutput,
-            "DictToString INI deve contenere i dati",
-            "sResult='', output contiene 'Mario'", f"sResult='{sResult}'"
-        )
-        test_passed_13 = test_passed_13 and condition
-    
-    test_mgr.end_test(test_passed_13)
-    test_passed = test_passed and test_passed_13
-    
-    return test_passed
-
-
-def test_aiSysLog(test_mgr: TestManager) -> bool:
-    """Test della classe acLog."""
-    test_passed = True
-    
-    # Test 014: acLog
-    test_mgr.start_test(14, "aiSysLog.py", "acLog")
-    test_passed_14 = True
+    test_num = 1
     
     try:
-        # Crea oggetto log
+        # Test 5.1: StringAppend
+        print(f"\nTest {test_num}.1: StringAppend")
+        print(f"  Input: sSource='prima', sAppend='seconda', sDelimiter=','")
+        result = aiSys.StringAppend("prima", "seconda", ",")
+        print(f"  Output: {result}")
+        assert result == "prima,seconda", "StringAppend errato"
+        test_num += 1
+        
+        # Test 5.2: StringBool
+        print(f"\nTest {test_num}.1: StringBool true")
+        print(f"  Input: sText='true'")
+        result = aiSys.StringBool("true")
+        print(f"  Output: {result}")
+        assert result == True, "'true' non riconosciuto"
+        
+        print(f"\nTest {test_num}.2: StringBool false")
+        print(f"  Input: sText='false'")
+        result = aiSys.StringBool("false")
+        print(f"  Output: {result}")
+        assert result == False, "'false' non riconosciuto come false"
+        test_num += 1
+        
+        # Test 5.3: isValidPassword
+        print(f"\nTest {test_num}.1: isValidPassword valida")
+        print(f"  Input: sText='Pass123_.!'")
+        result = aiSys.isValidPassword("Pass123_.!")
+        print(f"  Output: {result}")
+        assert result == True, "Password valida non riconosciuta"
+        
+        print(f"\nTest {test_num}.2: isValidPassword non valida")
+        print(f"  Input: sText='Pass@123'")
+        result = aiSys.isValidPassword("Pass@123")
+        print(f"  Output: {result}")
+        assert result == False, "Password non valida riconosciuta"
+        test_num += 1
+        
+        # Test 5.4: isEmail
+        print(f"\nTest {test_num}.1: isEmail valida")
+        print(f"  Input: sMail='nome.cognome@gmail.com'")
+        result = aiSys.isEmail("nome.cognome@gmail.com")
+        print(f"  Output: {result}")
+        assert result == True, "Email valida non riconosciuta"
+        
+        print(f"\nTest {test_num}.2: isEmail non valida")
+        print(f"  Input: sMail='nome@'")
+        result = aiSys.isEmail("nome@")
+        print(f"  Output: {result}")
+        assert result == False, "Email non valida riconosciuta"
+        test_num += 1
+        
+        # Test 5.5: StringToArray
+        print(f"\nTest {test_num}.1: StringToArray")
+        print(f"  Input: sText='a,b,c', delimiter=','")
+        result = aiSys.StringToArray("a,b,c", ",")
+        print(f"  Output: {result}")
+        assert result == ["a", "b", "c"], "StringToArray errato"
+        
+        print(f"\nTest {test_num}.2: StringToArray con spazi")
+        print(f"  Input: sText=' item1, item2 ,, item3 '")
+        result = aiSys.StringToArray(" item1, item2 ,, item3 ")
+        print(f"  Output: {result}")
+        assert result == ["item1", "item2", "item3"], "StringToArray con spazi errato"
+        test_num += 1
+        
+        # Test 5.6: StringToNum
+        print(f"\nTest {test_num}.1: StringToNum intero")
+        print(f"  Input: sNumber='123'")
+        result = aiSys.StringToNum("123")
+        print(f"  Output: {result} (tipo: {type(result).__name__})")
+        assert result == 123 and isinstance(result, int), "Conversione intero errata"
+        
+        print(f"\nTest {test_num}.2: StringToNum float con virgola")
+        print(f"  Input: sNumber='123,45'")
+        result = aiSys.StringToNum("123,45")
+        print(f"  Output: {result} (tipo: {type(result).__name__})")
+        assert result == 123.45 and isinstance(result, float), "Conversione float errata"
+        
+    except AssertionError as e:
+        print(f"  ❌ Assert fallito: {e}")
+        test_passed = False
+    except Exception as e:
+        print(f"  ❌ Errore durante il test: {e}")
+        test_passed = False
+    
+    return test_passed
+
+
+def test_aiSysDictToString() -> bool:
+    """Test per aiSysDictToString.py"""
+    print("\n" + "=" * 60)
+    print("Test 6: File aiSysDictToString.py, NomeTest: Conversione dizionari")
+    print("=" * 60)
+    
+    test_passed = True
+    test_num = 1
+    
+    try:
+        # Test 6.1: DictToString JSON
+        print(f"\nTest {test_num}.1: DictToString JSON")
+        test_dict = {"nome": "Mario", "età": 30, "attivo": True}
+        print(f"  Input: dictParam={test_dict}, sFormat='json'")
+        result_err, result_str = aiSys.DictToString(test_dict, "json")
+        print(f"  Output errore: {result_err}")
+        print(f"  Output stringa: {result_str[:50]}...")
+        assert result_err == "", f"Errore conversione JSON: {result_err}"
+        assert '"nome": "Mario"' in result_str, "JSON non contiene dati attesi"
+        test_num += 1
+        
+        # Test 6.2: DictToString INI
+        print(f"\nTest {test_num}.1: DictToString INI")
+        print(f"  Input: dictParam={test_dict}, sFormat='ini'")
+        result_err, result_str = aiSys.DictToString(test_dict, "ini")
+        print(f"  Output errore: {result_err}")
+        print(f"  Output stringa: {result_str}")
+        assert result_err == "", f"Errore conversione INI: {result_err}"
+        assert "nome=Mario" in result_str, "INI non contiene dati attesi"
+        test_num += 1
+        
+        # Test 6.3: DictToString INI.SECT
+        print(f"\nTest {test_num}.1: DictToString INI.SECT")
+        test_dict_sect = {
+            "sezione1": {"chiave1": "valore1", "chiave2": "valore2"},
+            "sezione2": {"chiaveA": "valoreA"}
+        }
+        print(f"  Input: dictParam={test_dict_sect}, sFormat='ini.sect'")
+        result_err, result_str = aiSys.DictToString(test_dict_sect, "ini.sect")
+        print(f"  Output errore: {result_err}")
+        print(f"  Output stringa:\n{result_str}")
+        assert result_err == "", f"Errore conversione INI.SECT: {result_err}"
+        assert "[sezione1]" in result_str, "Sezioni non presenti in output"
+        test_num += 1
+        
+        # Test 6.4: DictToXml
+        print(f"\nTest {test_num}.1: DictToXml base")
+        test_dict_xml = {"user": {"@id": "1", "name": "Mario"}}
+        print(f"  Input: dictParam={test_dict_xml}")
+        result = aiSys.DictToXml(test_dict_xml, root_tag="root")
+        print(f"  Output: {result}")
+        assert "<root>" in result, "Tag root mancante"
+        assert "id=\"1\"" in result, "Attributo mancante"
+        assert "<name>Mario</name>" in result, "Elemento mancante"
+        test_num += 1
+        
+        # Test 6.5: DictPrint (test visivo)
+        print(f"\nTest {test_num}.1: DictPrint (test visivo)")
+        print("  Output atteso su schermo:")
+        aiSys.DictPrint(test_dict)
+        # Non c'è assert, è solo un test visivo
+        
+    except AssertionError as e:
+        print(f"  ❌ Assert fallito: {e}")
+        test_passed = False
+    except Exception as e:
+        print(f"  ❌ Errore durante il test: {e}")
+        test_passed = False
+    
+    return test_passed
+
+
+def test_aiSysLog() -> bool:
+    """Test per aiSysLog.py (classe acLog)"""
+    print("\n" + "=" * 60)
+    print("Test 7: File aiSysLog.py, NomeTest: Classe acLog")
+    print("=" * 60)
+    
+    test_passed = True
+    test_num = 1
+    
+    # Crea directory temporanea per il log
+    temp_dir = tempfile.mkdtemp()
+    log_file = os.path.join(temp_dir, "aiSysTest_acLog.log")
+    
+    try:
+        # Test 7.1: Creazione e inizializzazione
+        print(f"\nTest {test_num}.1: Creazione acLog e Start")
         log = aiSys.acLog()
+        print(f"  Oggetto acLog creato")
         
-        # Assert 014_001 - Inizializzazione
-        result = log.Start("aiSysTest_acLog.log", ".")
-        condition = test_mgr.assert_test(
-            result == "",
-            "acLog.Start deve ritornare stringa vuota se successo",
-            "", result
-        )
-        test_passed_14 = test_passed_14 and condition
+        result = log.Start(sLogfile="aiSysTest_acLog", sLogFolder=temp_dir)
+        print(f"  Start risultato: {result}")
+        print(f"  Percorso log: {log.sLog}")
+        assert result == "", f"Errore Start: {result}"
+        assert log.sLog == log_file, f"Percorso log errato: {log.sLog}"
+        test_num += 1
         
-        # Assert 014_002 - Scrittura log
-        log.Log1("Test log info")
-        log.Log("ERR", "Test errore")
+        # Test 7.2: Scrittura log
+        print(f"\nTest {test_num}.1: Scrittura log")
+        print("  Output atteso su schermo e file:")
+        log.Log("TEST", "Messaggio di test 1")
+        log.Log1("Messaggio INFO")
+        log.Log0("", "Messaggio senza errore")
+        log.Log0("Errore123", "Messaggio con errore")
         
         # Verifica che il file sia stato creato
-        log_file = "./aiSysTest_acLog.log"
-        condition = test_mgr.assert_test(
-            os.path.exists(log_file),
-            "acLog deve creare file di log",
-            True, os.path.exists(log_file)
-        )
-        test_passed_14 = test_passed_14 and condition
+        assert os.path.exists(log_file), "File log non creato"
         
-        # Pulizia
-        if os.path.exists(log_file):
-            os.remove(log_file)
-            
+        # Leggi file per verificare contenuto
+        with open(log_file, 'r', encoding='utf-8') as f:
+            lines = f.readlines()
+            print(f"  Linee scritte nel file: {len(lines)}")
+            assert len(lines) >= 4, "Numero linee log insufficiente"
+        test_num += 1
+        
+        # Test 7.3: Log con file vuoto (test gestione errori)
+        print(f"\nTest {test_num}.1: Log con sLog vuoto")
+        log2 = aiSys.acLog()
+        log2.Log("TEST", "Questo non dovrebbe scrivere")
+        print("  OK: Nessun errore con sLog vuoto")
+        
+    except AssertionError as e:
+        print(f"  ❌ Assert fallito: {e}")
+        test_passed = False
     except Exception as e:
-        condition = test_mgr.assert_test(
-            False,
-            f"Errore durante test acLog: {str(e)}",
-            "Nessun errore", str(e)
-        )
-        test_passed_14 = False
-    
-    test_mgr.end_test(test_passed_14)
-    test_passed = test_passed and test_passed_14
+        print(f"  ❌ Errore durante il test: {e}")
+        test_passed = False
+    finally:
+        # Pulizia
+        shutil.rmtree(temp_dir, ignore_errors=True)
     
     return test_passed
 
 
-# =============================================================================
-# FUNZIONE PRINCIPALE
-# =============================================================================
-
-def main():
-    """Funzione principale di test."""
-    print("=" * 70)
-    print("TEST COMPLETO DEL MODULO aiSys")
-    print("=" * 70)
+def test_integration() -> bool:
+    """Test di integrazione tra moduli"""
+    print("\n" + "=" * 60)
+    print("Test 8: Integrazione moduli aiSys")
+    print("=" * 60)
     
-    # Inizializza gestore test
-    test_mgr = TestManager()
+    test_passed = True
+    test_num = 1
     
-    # Calcola numero totale di test
-    test_functions = [
-        test_aiSysBase,
-        test_aiSysTimestamp,
-        test_aiSysConfig,
-        test_aiSysFileio,
-        test_aiSysStrings,
-        test_aiSysDictToString,
-        test_aiSysLog
-    ]
-    
-    total_tests = len(test_functions) + 7  # Test aggiuntivi per ogni modulo
-    print(f"\nNumero totale di test da eseguire: {total_tests}")
-    print("Inizio esecuzione test...")
-    
-    # Esegui tutti i test
-    for test_func in test_functions:
-        try:
-            test_func(test_mgr)
-        except Exception as e:
-            print(f"\nERRORE durante l'esecuzione del test: {str(e)}")
-    
-    # Stampa riepilogo
-    test_mgr.print_summary()
-    
-    # Ritorna codice di uscita
-    if test_mgr.failed_tests == 0:
-        print("\n✅ TUTTI I TEST SONO PASSATI CON SUCCESSO!")
-        return 0
-    else:
-        print("\n❌ ALCUNI TEST SONO FALLITI")
-        return 1
-
-
-# =============================================================================
-# PUNTO DI INGRESSO
-# =============================================================================
-
-if __name__ == "__main__":
     try:
-        exit_code = main()
-        sys.exit(exit_code)
-    except KeyboardInterrupt:
-        print("\n\nTest interrotto dall'utente.")
-        sys.exit(1)
+        # Test 8.1: Uso combinato di più moduli
+        print(f"\nTest {test_num}.1: Integrazione base")
+        
+        # Crea dizionario con Timestamp
+        config_dict = {
+            "timestamp": aiSys.Timestamp(),
+            "user": "TestUser",
+            "level": "debug"
+        }
+        
+        # Usa Expand con il dizionario
+        message = "Log $timestamp - Utente: $user - Livello: $level"
+        expanded = aiSys.Expand(message, config_dict)
+        print(f"  Messaggio espanso: {expanded}")
+        assert "TestUser" in expanded, "Expand non funziona con dizionario"
+        
+        # Usa StringAppend
+        log_line = aiSys.StringAppend("", expanded, " | ")
+        print(f"  Linea log: {log_line}")
+        
+        # Valida email
+        email_valid = aiSys.isEmail("test@example.com")
+        print(f"  Email valida: {email_valid}")
+        assert email_valid == True, "Validazione email non funziona"
+        
+        # Converte stringa in array
+        tags = aiSys.StringToArray("python,test,integration")
+        print(f"  Tags: {tags}")
+        assert len(tags) == 3, "Conversione array non funziona"
+        
+        test_num += 1
+        
+        # Test 8.2: File operations con configurazione
+        print(f"\nTest {test_num}.1: Operazioni file con configurazione")
+        
+        # Crea file INI con dati complessi
+        temp_dir = tempfile.mkdtemp()
+        ini_file = os.path.join(temp_dir, "config.ini")
+        
+        config_data = {
+            "database": {
+                "host": "$DB_HOST",
+                "port": "$DB_PORT"
+            },
+            "app": {
+                "name": "$APP_NAME",
+                "version": "1.0"
+            }
+        }
+        
+        # Salva
+        aiSys.save_dict_to_ini(config_data, ini_file)
+        
+        # Espandi variabili
+        env_config = {
+            "DB_HOST": "localhost",
+            "DB_PORT": "5432",
+            "APP_NAME": "aiSysTest"
+        }
+        
+        # Leggi ed espandi
+        result, loaded = aiSys.read_ini_to_dict(ini_file)
+        expanded_config = aiSys.ExpandDict(loaded, env_config)
+        
+        print(f"  Config espanso: {expanded_config}")
+        assert expanded_config["database"]["host"] == "localhost", "ExpandDict non funziona con INI"
+        
+        # Test PathMake
+        full_path = aiSys.PathMake(temp_dir, "log", "txt")
+        print(f"  Path creato: {full_path}")
+        assert full_path.endswith(".txt"), "PathMake non funziona"
+        
+        # Pulizia
+        shutil.rmtree(temp_dir, ignore_errors=True)
+        
+    except AssertionError as e:
+        print(f"  ❌ Assert fallito: {e}")
+        test_passed = False
     except Exception as e:
-        print(f"\nERRORE CRITICO: {str(e)}")
-        sys.exit(2)
+        print(f"  ❌ Errore durante il test: {e}")
+        test_passed = False
+    
+    return test_passed
+
+
+# Esegui i test quando il file viene eseguito direttamente
+if __name__ == "__main__":
+    run_tests()

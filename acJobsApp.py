@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 acJobsApp.py - Classe per gestire applicazioni batch ntJobApp
-Versione basata sulla specifica coerente del documento.
+Versione finale basata sulla specifica coerente.
 
 Una ntJobApp è un'applicazione batch che:
 1. Legge un file .ini di input o lo crea da parametri CLI
@@ -36,7 +36,6 @@ class acJobsApp:
         self.tsStart = ""           # Timestamp inizio applicazione
         self.sType = ""             # Tipo e versione applicazione
         self.sLogFile = ""          # Nome facoltativo del file di Log
-        self.dictPrint = None       # Istanza aiSysys (per stampa configurazione)
         self.sCommand = ""          # ID del comando corrente
         self.dictJobs = {}          # Dizionario contenente tutti i dizionari
         self.sJobEnd = ""           # Nome del file .end di output
@@ -146,14 +145,15 @@ class acJobsApp:
         if sResult != "":
             return self._return_with_convention(sResult)
         
-        # Stampa configurazione usando DictPrint
-        try:
-            # Nota: nella specifica è scritto self.dictJobs("CONFIG") 
-            # ma probabilmente è un refuso, uso ["CONFIG"]
-            aiSys.DictPrint(self.dictJobs["CONFIG"])
-        except Exception as e:
-            sResult = f"Errore in DictPrint: {str(e)}"
-            return self._return_with_convention(sResult)
+        # ESPANSIONE E STAMPA PER OGNI SEZIONE (come da specifica)
+        for sKey in self.dictJobs:
+            print(f"Sezione: {sKey}")
+            
+            # Esegui ExpandDict su ogni sezione
+            aiSys.ExpandDict(self.dictJobs[sKey], self.dictJobs["CONFIG"])
+            
+            # Esegui DictPrint su ogni sezione
+            aiSys.DictPrint(self.dictJobs[sKey])
         
         # Estrae parametri di configurazione
         sTemp = self.Config("LOG")
@@ -172,10 +172,6 @@ class acJobsApp:
         # Rimuove password dalla configurazione (se presente)
         if "PASSWORD" in self.dictJobs.get("CONFIG", {}):
             del self.dictJobs["CONFIG"]["PASSWORD"]
-        
-        # Espansione valori (sempre se nessun errore)
-        if sResult == "":
-            aiSys.ExpandDict(self.dictJobs, self.dictJobs["CONFIG"])
         
         # Verifiche finali sui parametri config
         if self.sName == "":
@@ -334,7 +330,6 @@ class acJobsApp:
                 file_counter += 1
         
         # Se sReturnType è vuoto, imposta a "S" (Successo)
-        # (anche se normalmente non dovrebbe essere vuoto)
         if sReturnType == "":
             sReturnType = "S"
         
@@ -379,7 +374,7 @@ class acJobsApp:
             if self.sCommand == "":
                 sResult = f"COMMAND non trovato in {sKey}"
                 self.Log(sResult)
-                # Continua con il prossimo job
+                # Continua con il prossimo job (non esce)
                 continue
             
             # Esegue il comando tramite callback
@@ -502,12 +497,79 @@ class acJobsApp:
 
 
 # =============================================================================
-# FUNZIONE PRINCIPALE - ESEMPIO DI UTILIZZO
+# ESEMPIO DI UTILIZZO CON CALLBACK PERSONALIZZATA
+# =============================================================================
+def esempio_callback(dictJob):
+    """
+    Esempio di funzione callback che può essere passata a Run().
+    Questa funzione dovrebbe essere implementata dall'utente per eseguire
+    i comandi specifici dell'applicazione.
+    
+    Args:
+        dictJob (dict): Dizionario con parametri del job corrente
+        
+    Returns:
+        str: "" se successo, messaggio di errore altrimenti
+    """
+    # Accede all'istanza globale jData
+    global jData
+    
+    command = dictJob.get("COMMAND", "")
+    print(f"  [Callback] Esecuzione comando: {command}")
+    
+    # ESEMPIO: implementazione comandi
+    if command == "NOME_AZIONE":
+        print(f"    Elaborazione per {command}")
+        
+        # Esempio: leggi file se specificato
+        if "FILE.ID1" in dictJob:
+            file_name = dictJob["FILE.ID1"]
+            try:
+                with open(file_name, 'r') as f:
+                    content = f.read()
+                print(f"    Letto file {file_name}: {len(content)} bytes")
+            except Exception as e:
+                jData.Return(f"Errore lettura file {file_name}", str(e))
+                return f"Errore lettura file {file_name}"
+        
+        # Segnala successo
+        jData.Return("", f"Comando {command} eseguito con successo")
+        return ""
+    
+    elif command == "COPIA_FILE":
+        # Esempio: copia file
+        source = dictJob.get("SOURCE", "")
+        dest = dictJob.get("DEST", "")
+        
+        if not source or not dest:
+            jData.Return("Parametri SOURCE o DEST mancanti", "Parametri insufficienti")
+            return "Parametri insufficienti"
+        
+        try:
+            import shutil
+            shutil.copy2(source, dest)
+            print(f"    Copiato {source} -> {dest}")
+            
+            # Restituisci file come risultato
+            jData.Return("", f"File copiato: {dest}", {"01": dest})
+            return ""
+        except Exception as e:
+            jData.Return(f"Errore copia file: {str(e)}", str(e))
+            return f"Errore copia file: {str(e)}"
+    
+    else:
+        error_msg = f"Comando non riconosciuto: {command}"
+        jData.Return(error_msg, error_msg)
+        return error_msg
+
+
+# =============================================================================
+# FUNZIONE PRINCIPALE
 # =============================================================================
 def main():
     """
-    Esempio di utilizzo della classe acJobsApp.
-    Segue la logica di funzionamento descritta nel documento.
+    Punto di ingresso principale dell'applicazione.
+    Segue esattamente la logica descritta nella specifica.
     """
     # 1. Crea istanza di acJobsApp in variabile globale jData
     global jData
@@ -523,48 +585,13 @@ def main():
         # b. Esci dall'applicazione
         sys.exit(error_code)
     
-    # 4. Definizione della funzione callback per eseguire comandi
-    def cbCommands(dictJob):
-        """
-        Esempio di funzione callback per eseguire comandi.
-        In un'applicazione reale, questa funzione conterrebbe la logica
-        per eseguire il comando specificato in dictJob["COMMAND"].
-        
-        Args:
-            dictJob (dict): Dizionario con parametri del job
-            
-        Returns:
-            str: "" se successo, messaggio di errore altrimenti
-        """
-        command = dictJob.get("COMMAND", "")
-        print(f"  [Callback] Esecuzione comando: {command}")
-        
-        # ESEMPIO: logica per diversi comandi
-        if command == "NOME_AZIONE":
-            # Simula elaborazione riuscita
-            print(f"    Elaborazione per {command} completata")
-            # Aggiorna risultati usando Return
-            jData.Return("", "Elaborazione completata con successo")
-            return ""
-        elif command == "ERRORE_TEST":
-            # Simula errore
-            print(f"    Simulazione errore per {command}")
-            jData.Return("Errore simulato", "Test di errore completato")
-            return "Errore simulato"
-        else:
-            # Comando non riconosciuto
-            error_msg = f"Comando non riconosciuto: {command}"
-            print(f"    {error_msg}")
-            jData.Return(error_msg, error_msg)
-            return error_msg
+    # 4. Esegui sResult=jData.Run() con callback di esempio
+    sResult = jData.Run(esempio_callback)
     
-    # 5. Esegui sResult=jData.Run(cbCommands)
-    sResult = jData.Run(cbCommands)
-    
-    # 6. Esegui il metodo jData.End(sResult)
+    # 5. Esegui il metodo self.End(sResult)
     error_code = jData.End(sResult)
     
-    # 7. Esci dall'applicazione
+    # 6. Esci dall'applicazione
     sys.exit(error_code)
 
 

@@ -1,157 +1,281 @@
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
 """
-aiSysFileio.py - Funzioni per I/O su file
+aiSysFileio.py - Funzioni per l'I/O dei file
 """
 
 import os
+import sys
 import csv
 import configparser
-from typing import Dict, List, Tuple, Any
-import sys
+from typing import Dict, Any, Optional, Union, List, Tuple
 
-def loc_aiErrorProc(sResult: str, sProc: str) -> str:
-    """
-    Funzione locale per la gestione errori.
-    
-    Args:
-        sResult: Stringa errore
-        sProc: Nome della procedura
-    
-    Returns:
-        str: Stringa formattata o vuota
-    """
-    if sResult != "":
-        return f"{sProc}: Errore {sResult}"
-    return ""
+# Import delle funzioni base e stringhe
+from aiSysBase import ErrorProc
+from aiSysStrings import StringWash, StringAppend
 
+# Crea alias locali
+loc_ErrorProc = ErrorProc
 
-def read_csv_to_dict(csv_file_path: str, asHeader: List[str] = None, delimiter: str = ';') -> Tuple[str, Dict[str, Dict[str, str]]]:
+def read_csv_to_dict(csv_file_path: str, asHeader: List[str] = None, 
+                    delimiter: str = ';') -> Tuple[str, Dict]:
     """
     Legge un file CSV e lo converte in un dizionario di dizionari.
     
     Args:
-        csv_file_path: Percorso del file CSV
-        asHeader: Array di nomi campo per verifica
-        delimiter: Carattere delimitatore
+        csv_file_path: Percorso completo del file CSV
+        asHeader: Array di nomi dei campi (facoltativo)
+        delimiter: Carattere delimitatore (default=';')
     
     Returns:
         Tuple[str, Dict]: (sResult, dictCSV)
     """
     sProc = "read_csv_to_dict"
+    sResult = ""
+    dictCSV = {}
     
     try:
-        sResult = ""
-        
+        # Verifica che il file esista
         if not os.path.exists(csv_file_path):
             sResult = f"File non valido {csv_file_path}"
+            print(sResult)
             return (sResult, {})
         
-        dictCSV = {}
-        header = []
-        line_number = 0
-        
-        with open(csv_file_path, 'r', encoding='utf-8') as file:
-            csv_reader = csv.reader(file, delimiter=delimiter)
+        # Legge il file CSV con codifica UTF-8
+        with open(csv_file_path, 'r', encoding='utf-8') as csvfile:
+            reader = csv.reader(csvfile, delimiter=delimiter)
             
-            try:
-                header = next(csv_reader)
-                line_number += 1
-            except StopIteration:
-                sResult = f"File vuoto o non Valido {csv_file_path}"
+            # Legge l'header
+            file_header = next(reader, None)
+            if not file_header:
+                sResult = f"File vuoto {csv_file_path}"
+                print(sResult)
                 return (sResult, {})
             
+            # Verifica header se specificato
             if asHeader:
-                if not all(field in header for field in asHeader):
-                    sResult = f"Header non contiene tutti i campi richiesti: {asHeader}"
+                if len(file_header) != len(asHeader):
+                    sResult = f"Numero campi header non corrispondente. File: {len(file_header)}, Richiesti: {len(asHeader)}"
+                    print(sResult)
                     return (sResult, {})
-            
-            nFieldsHeader = len(header)
-            
-            for row in csv_reader:
-                line_number += 1
                 
-                if not row:
-                    continue
-                
+                for i, expected in enumerate(asHeader):
+                    if file_header[i].strip() != expected:
+                        sResult = f"Campo header non corrispondente in posizione {i}: '{file_header[i]}' != '{expected}'"
+                        print(sResult)
+                        return (sResult, {})
+            
+            nFieldsHeader = len(file_header)
+            nRow = 1  # Contatore righe (inizia da 1 per l'header)
+            
+            # Legge le righe
+            for row in reader:
+                nRow += 1
                 nFieldsRead = len(row)
+                
+                # Verifica numero campi
                 if nFieldsRead != nFieldsHeader:
-                    sResult = f"Numero campi non corretto, record: {line_number}, Letti: {nFieldsRead}, Previsti: {nFieldsHeader}, File: {csv_file_path}"
+                    sResult = f"Numero campi non corretto, record: {nRow}, Letti: {nFieldsRead}, Previsti: {nFieldsHeader}, File: {csv_file_path}"
+                    print(sResult)
                     return (sResult, {})
                 
+                # Prima colonna come chiave
                 key = row[0].strip()
                 
+                # Verifica chiave
                 if not key:
-                    sResult = "Errore chiavi nulle"
+                    sResult = f"Errore chiavi nulle alla riga {nRow}"
+                    print(sResult)
                     return (sResult, {})
                 
                 if key in dictCSV:
-                    sResult = f"Errore chiave duplicata: {key}"
+                    sResult = f"Errore chiave duplicata '{key}' alla riga {nRow}"
+                    print(sResult)
                     return (sResult, {})
                 
-                row_dict = {}
-                for i, field in enumerate(header):
-                    row_dict[field] = row[i].strip()
+                # Crea dizionario interno
+                inner_dict = {}
+                for i in range(len(file_header)):
+                    field_name = file_header[i].strip()
+                    field_value = row[i].strip()
+                    inner_dict[field_name] = field_value
                 
-                dictCSV[key] = row_dict
+                dictCSV[key] = inner_dict
         
-        if not dictCSV:
-            sResult = f"File vuoto o non Valido {csv_file_path}"
-        
+        sResult = f"File letto correttamente: {csv_file_path}, righe: {nRow-1}"
         return (sResult, dictCSV)
         
     except FileNotFoundError:
         sResult = f"Errore apertura file CSV: {csv_file_path}"
+        print(sResult)
         return (sResult, {})
     except Exception as e:
         sResult = f"Errore lettura file {csv_file_path}: {str(e)}"
+        print(sResult)
         return (sResult, {})
 
+def save_dict_to_csv(csv_file_name: str, asHeader: List[str], 
+                    dictData: Dict, sMode: str, sDelimiter: str = ';') -> str:
+    """
+    Scrive un dizionario in un file CSV.
+    
+    Args:
+        csv_file_name: Percorso completo del file CSV
+        asHeader: Array di nomi dei campi
+        dictData: Dizionario dei dati da scrivere
+        sMode: "a" per append, "w" per write
+        sDelimiter: Carattere delimitatore (default=';')
+    
+    Returns:
+        str: Risultato dell'operazione
+    """
+    sProc = "save_dict_to_csv"
+    sResult = ""
+    
+    try:
+        # Validazioni
+        if not csv_file_name:
+            sResult = "Nome file non valido"
+            print(sResult)
+            return loc_ErrorProc(sResult, sProc)
+        
+        if not asHeader:
+            sResult = "Header vuoto"
+            print(sResult)
+            return loc_ErrorProc(sResult, sProc)
+        
+        if not dictData:
+            sResult = "Dati vuoti"
+            print(sResult)
+            return loc_ErrorProc(sResult, sProc)
+        
+        if sMode not in ['a', 'w']:
+            sResult = f"Modalita' {sMode} non valida"
+            print(sResult)
+            return loc_ErrorProc(sResult, sProc)
+        
+        file_exists = os.path.exists(csv_file_name)
+        
+        # Gestione file esistente/non esistente
+        if not file_exists:
+            try:
+                os.makedirs(os.path.dirname(csv_file_name), exist_ok=True)
+                with open(csv_file_name, 'w', encoding='utf-8', newline='') as hFile:
+                    header_line = sDelimiter.join(asHeader)
+                    hFile.write(header_line + '\n')
+            except Exception as e:
+                sResult = f"Errore creazione file: {e}"
+                print(sResult)
+                return loc_ErrorProc(sResult, sProc)
+        
+        # Determina modalità apertura
+        write_header = False
+        if sMode == 'w':
+            mode = 'w'
+            write_header = True  # Sempre in modalità write
+        else:  # sMode == 'a'
+            mode = 'a'
+            write_header = not file_exists  # Header solo se file nuovo
+        
+        # Apri file e scrivi dati
+        with open(csv_file_name, mode, encoding='utf-8', newline='') as hFile:
+            # Scrivi header se necessario
+            if write_header:
+                header_line = sDelimiter.join(asHeader)
+                hFile.write(header_line + '\n')
+            
+            # Processa ogni record
+            for sKeyRecord, dictRecord in dictData.items():
+                # Verifica che sia un dizionario
+                if not isinstance(dictRecord, dict):
+                    continue
+                
+                sLinea = ""
+                
+                # Per ogni campo nell'header (in ordine)
+                for sKeyField in asHeader:
+                    # Gestione campo mancante
+                    if sKeyField not in dictRecord:
+                        sValue = ""
+                    else:
+                        # Ottieni e converti valore
+                        raw_value = dictRecord[sKeyField]
+                        sValue = str(raw_value)
+                        
+                        # Applica StringWash (pulisce)
+                        sValue = StringWash(sValue)
+                        
+                        # Proteggi se contiene spazi
+                        if ' ' in sValue:
+                            sValue = f'"{sValue}"'
+                    
+                    # Aggiungi a sLinea
+                    sLinea = StringAppend(sLinea, sValue, sDelimiter)
+                
+                # Accoda la riga completata al file
+                hFile.write(sLinea + '\n')
+        
+        sResult = f"File salvato correttamente: {csv_file_name}"
+        return loc_ErrorProc(sResult, sProc)
+        
+    except Exception as e:
+        sResult = f"Errore in save_dict_to_csv: {str(e)}"
+        print(sResult)
+        return loc_ErrorProc(sResult, sProc)
 
-def read_ini_to_dict(ini_file_path: str) -> Tuple[str, Dict[str, Dict[str, str]]]:
+def read_ini_to_dict(ini_file_path: str) -> Tuple[str, Dict]:
     """
     Legge un file INI e lo converte in un dizionario di dizionari.
     
     Args:
-        ini_file_path: Percorso del file INI
+        ini_file_path: Percorso completo del file INI
     
     Returns:
         Tuple[str, Dict]: (sResult, dictINI)
     """
     sProc = "read_ini_to_dict"
+    sResult = ""
+    dictINI = {}
     
     try:
-        sResult = ""
-        
+        # Verifica che il file esista
         if not os.path.exists(ini_file_path):
             sResult = f"File non esistente: {ini_file_path}"
+            print(sResult)
             return (sResult, {})
         
+        # Configura configparser
         config = configparser.ConfigParser(
-            interpolation=None,
-            comment_prefixes=(';',),
-            inline_comment_prefixes=()
+            interpolation=None,  # disattiva %
+            comment_prefixes=(';',),  # solo ; come commento
+            inline_comment_prefixes=()  # disattiva commenti inline
         )
-        config.optionxform = str
+        config.optionxform = str  # mantiene case originale
         
+        # Legge il file
         config.read(ini_file_path, encoding='utf-8')
         
-        dictINI = {}
+        # Converte in dizionario
         for section in config.sections():
             dictINI[section] = {}
             for key in config[section]:
                 dictINI[section][key] = config[section][key]
         
-        print(f"Letto file .ini {ini_file_path}, Numero Sezioni: {len(dictINI)}")
+        sResult = f"Letto file .ini {ini_file_path}, Numero Sezioni: {len(dictINI)}"
+        print(sResult)
         return (sResult, dictINI)
         
     except FileNotFoundError:
         sResult = f"Errore apertura file INI: {ini_file_path}"
+        print(sResult)
         return (sResult, {})
     except Exception as e:
         sResult = f"Errore lettura file INI {ini_file_path}: {str(e)}"
+        print(sResult)
         return (sResult, {})
 
-
-def save_dict_to_ini(data_dict: Dict[str, Dict[str, str]], ini_file_path: str) -> str:
+def save_dict_to_ini(data_dict: Dict[str, Dict[str, str]], 
+                    ini_file_path: str) -> str:
     """
     Salva un dizionario di dizionari in un file INI.
     
@@ -160,32 +284,36 @@ def save_dict_to_ini(data_dict: Dict[str, Dict[str, str]], ini_file_path: str) -
         ini_file_path: Percorso del file INI
     
     Returns:
-        str: Stringa vuota se successo, stringa di errore altrimenti
+        str: Risultato dell'operazione
     """
     sProc = "save_dict_to_ini"
+    sResult = ""
     
     try:
-        if not data_dict:
-            return ""
-        
+        # Configura configparser
         config = configparser.ConfigParser()
-        config.optionxform = str
+        config.optionxform = str  # mantiene case originale
         
-        for section, section_data in data_dict.items():
+        # Aggiunge sezioni e chiavi
+        for section, section_dict in data_dict.items():
             config[section] = {}
-            for key, value in section_data.items():
+            for key, value in section_dict.items():
                 config[section][key] = str(value)
         
+        # Crea directory se necessario
         os.makedirs(os.path.dirname(ini_file_path), exist_ok=True)
         
-        with open(ini_file_path, 'w', encoding='utf-8') as file:
-            config.write(file)
+        # Salva il file
+        with open(ini_file_path, 'w', encoding='utf-8') as f:
+            config.write(f)
         
-        return ""
+        sResult = f"File INI salvato: {ini_file_path}"
+        return sResult
         
     except Exception as e:
-        return loc_aiErrorProc(str(e), sProc)
-
+        sResult = loc_ErrorProc(f"Errore - {str(e)}", sProc)
+        print(sResult)
+        return sResult
 
 def save_array_file(sFile: str, asLines: List[str], sMode: str = "") -> str:
     """
@@ -197,26 +325,30 @@ def save_array_file(sFile: str, asLines: List[str], sMode: str = "") -> str:
         sMode: "a" per append, altrimenti sovrascrive
     
     Returns:
-        str: Stringa vuota se successo, errore formattato altrimenti
+        str: Risultato dell'operazione
     """
     sProc = "save_array_file"
+    sResult = ""
     
     try:
-        if not asLines:
-            asLines = []
-        
+        # Determina modalità
         mode = 'a' if sMode == "a" else 'w'
         
-        with open(sFile, mode, encoding='utf-8') as file:
-            for line in asLines:
-                file.write(str(line) + '\n')
+        # Crea directory se necessario
+        os.makedirs(os.path.dirname(sFile), exist_ok=True)
         
-        return ""
+        # Salva il file
+        with open(sFile, mode, encoding='utf-8') as f:
+            for line in asLines:
+                f.write(line + '\n')
+        
+        sResult = f"Array salvato in {sFile}"
+        return loc_ErrorProc(sResult, sProc)
         
     except Exception as e:
         sResult = f"Errore salvataggio array in {sFile}, Errore: {str(e)}"
-        return loc_aiErrorProc(sResult, sProc)
-
+        print(sResult)
+        return loc_ErrorProc(sResult, sProc)
 
 def read_array_file(sFile: str) -> Tuple[str, List[str]]:
     """
@@ -229,23 +361,25 @@ def read_array_file(sFile: str) -> Tuple[str, List[str]]:
         Tuple[str, List[str]]: (sResult, asLines)
     """
     sProc = "read_array_file"
+    sResult = ""
+    asLines = []
     
     try:
         if not os.path.exists(sFile):
             sResult = f"File non esistente: {sFile}"
+            print(sResult)
             return (sResult, [])
         
-        asLines = []
-        with open(sFile, 'r', encoding='utf-8') as file:
-            for line in file:
-                asLines.append(line.rstrip('\n'))
+        with open(sFile, 'r', encoding='utf-8') as f:
+            asLines = [line.rstrip('\n') for line in f]
         
-        return ("", asLines)
+        sResult = f"File letto: {sFile}, righe: {len(asLines)}"
+        return (sResult, asLines)
         
     except Exception as e:
         sResult = f"Errore lettura array di stringhe in {sFile}, Errore: {str(e)}"
+        print(sResult)
         return (sResult, [])
-
 
 def isValidPath(sPath: str) -> bool:
     """
@@ -255,95 +389,129 @@ def isValidPath(sPath: str) -> bool:
         sPath: Percorso da verificare
     
     Returns:
-        bool: True se percorso valido ed esiste
+        bool: True se valido ed esiste, False altrimenti
     """
     sProc = "isValidPath"
-    
     try:
-        if not sPath:
-            return False
-        
         return os.path.exists(sPath)
-        
-    except Exception:
+    except Exception as e:
+        print(f"{sProc}: Errore - {str(e)}")
         return False
-
 
 def isFilename(sFilename: str) -> bool:
     """
-    Verifica se un nome di file è corretto.
+    Verifica che un nome di file sia corretto.
     
     Args:
-        sFilename: Nome del file (senza percorso)
+        sFilename: Nome del file da verificare
     
     Returns:
-        bool: True se nome file valido
+        bool: True se corretto, False altrimenti
     """
     sProc = "isFilename"
-    
     try:
         if not sFilename:
             return False
         
-        if '.' in sFilename:
-            name_part, ext_part = sFilename.split('.', 1)
+        # Controlla caratteri nel nome file (prima del punto)
+        name_parts = sFilename.split('.')
+        if len(name_parts) < 2:
+            # Senza estensione
+            base_name = sFilename
+            pattern = r'^[a-zA-Z0-9_]+$'
+            return bool(re.match(pattern, base_name))
         else:
-            name_part = sFilename
-            ext_part = ""
-        
-        name_pattern = r'^[A-Za-z0-9_]+$'
-        if not re.match(name_pattern, name_part):
-            return False
-        
-        if ext_part:
-            ext_pattern = r'^[A-Za-z0-9_.]+$'
-            if not re.match(ext_pattern, ext_part):
+            # Con estensione
+            base_name = '.'.join(name_parts[:-1])
+            ext = name_parts[-1]
+            
+            # Verifica nome base
+            base_pattern = r'^[a-zA-Z0-9_]+$'
+            if not re.match(base_pattern, base_name):
                 return False
-        
-        return True
-        
-    except Exception:
+            
+            # Verifica estensione
+            ext_pattern = r'^[a-zA-Z0-9_.]+$'
+            return bool(re.match(ext_pattern, ext))
+            
+    except Exception as e:
+        print(f"{sProc}: Errore - {str(e)}")
         return False
 
-
-def PathMake(sPath: str, sFile: str, sExt: str = "") -> str:
+def PathMake(sPath: Optional[str] = None, sFile: str = "", 
+            sExt: Optional[str] = None) -> str:
     """
     Crea un percorso completo combinando cartella, file ed estensione.
     
     Args:
-        sPath: Percorso della cartella
-        sFile: Nome del file
-        sExt: Estensione del file
+        sPath: Percorso della cartella (se None, usa cartella corrente)
+        sFile: Nome del file (obbligatorio)
+        sExt: Estensione del file (opzionale)
     
     Returns:
-        str: Percorso completo o stringa vuota in caso di errore
+        str: Percorso completo, stringa vuota in caso di errore
     """
     sProc = "PathMake"
-    
     try:
+        # Verifica parametri obbligatori
         if not sFile:
-            print(f"{sProc}: Errore - Nome file obbligatorio")
             return ""
         
+        # Gestisci sPath
         if not sPath:
-            sPath = os.getcwd()
+            sPath = os.getcwd()  # cartella corrente
         
+        # Normalizza il percorso
         sPath = os.path.normpath(sPath)
         
+        # Assicurati che sPath finisca con il separatore corretto
         if not sPath.endswith(os.sep):
             sPath += os.sep
         
+        # Gestisci sExt
+        sFullFile = sFile
         if sExt:
-            if not sExt.startswith('.'):
-                sExt = '.' + sExt
-            sFile += sExt
+            # Rimuovi eventuale punto iniziale se già presente
+            if sExt.startswith('.'):
+                sExt = sExt[1:]
+            sFullFile = f"{sFile}.{sExt}"
         
-        full_path = os.path.join(sPath, sFile)
+        # Combina percorso e file
+        sFullPath = os.path.join(sPath, sFullFile)
         
-        return full_path
+        # Normalizza di nuovo per sicurezza
+        sFullPath = os.path.normpath(sFullPath)
+        
+        # Verifica che il percorso sia valido (non assoluto per drive Windows)
+        if sys.platform == "win32":
+            # Su Windows, verifica che non ci siano caratteri non validi
+            if ':' in sFullPath.replace(':\\', ''):
+                return ""
+        
+        return sFullPath
         
     except Exception as e:
         print(f"{sProc}: Errore - {str(e)}")
         return ""
 
-
+# Test locale se eseguito direttamente
+if __name__ == "__main__":
+    # Test save_dict_to_csv
+    test_data = {
+        'user1': {'id': '1', 'nome': 'Mario Rossi', 'età': '30'},
+        'user2': {'id': '2', 'nome': 'Luigi Verdi', 'età': '25'}
+    }
+    header = ['id', 'nome', 'età']
+    
+    print("Test save_dict_to_csv:")
+    result = save_dict_to_csv('test.csv', header, test_data, 'w', ';')
+    print(f"Risultato: {result}")
+    
+    print("\nTest read_csv_to_dict:")
+    result, data = read_csv_to_dict('test.csv', header, ';')
+    print(f"Risultato: {result}")
+    print(f"Dati letti: {data}")
+    
+    # Pulisci
+    if os.path.exists('test.csv'):
+        os.remove('test.csv')
