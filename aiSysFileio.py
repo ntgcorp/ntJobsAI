@@ -261,8 +261,13 @@ def read_ini_to_dict(ini_file_path: str) -> Tuple[str, Dict]:
             for key in config[section]:
                 dictINI[section][key] = config[section][key]
         
+<<<<<<< HEAD
         print(f"Letto file .ini {ini_file_path}, Numero Sezioni: {len(dictINI)}")
         sResult=""
+=======
+        sResult = f"Letto file .ini {ini_file_path}, Numero Sezioni: {len(dictINI)}"
+        print(sResult)
+>>>>>>> bfee79e9a1dd5326014a7baaa0699a53f6462d9d
         return (sResult, dictINI)
         
     except FileNotFoundError:

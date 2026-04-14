@@ -1,649 +1,600 @@
 #!/usr/bin/env python3
-# -*- coding: utf-8 -*-
 """
-ncJobsApp.py - Classe per applicazioni ntJobsApp batch
-Versione: 1.0
-Python: 3.10+
+acJobsApp.py - Classe per gestire applicazioni batch ntJobApp
+Versione finale basata sulla specifica coerente.
+
+Una ntJobApp è un'applicazione batch che:
+1. Legge un file .ini di input o lo crea da parametri CLI
+2. Esegue uno o più comandi (jobs) tramite callback
+3. Restituisce un file .end con i risultati
+4. Termina con codice: 0=OK, 1=Errore INI, 2=Errore job
 """
 
-import os
 import sys
-import configparser
-from typing import Dict, Callable, Optional
-
-# Import libreria di supporto
+import os
 import aiSys
 
-
-class ncJobsApp:
+class acJobsApp:
     """
-    Classe per orchestrare micro applicazioni batch ntJobsApp
-    
-    Le ntJobsApp leggono un file .ini in ingresso, eseguono job,
-    e restituiscono un file .end con i risultati
+    Classe principale per orchestrare micro applicazioni batch ntJobApp.
     """
     
     def __init__(self):
-        """Inizializzazione attributi della classe"""
+        """
+        Inizializza gli attributi della classe.
+        """
+        # Inizializza sistema di log
+        self.jLog = aiSys.acLog()
         
-        # File I/O
-        self.sJobIni = ""
-        self.sJobEnd = ""
-        
-        # Configurazione
-        self.bErrExit = False
-        self.bExpand = False
-        self.sName = ""
-        self.tsStart = ""
-        self.sType = ""
-        self.sLog = ""
-        
-        # Job corrente
-        self.sJobId = ""
-        self.sCommand = ""
+        # Inizializza dizionario job corrente
         self.dictJob = {}
         
-        # Dati globali
-        self.objIni = None
-        self.dictJobs = {}
-        self.dictConfig = {}
+        # Attributi della classe (come da specifica)
+        self.sJobIni = ""           # File .ini di input
+        self.bErrExit = True        # Esce in caso di errore di un job
+        self.sName = ""             # Nome dell'applicazione
+        self.tsStart = ""           # Timestamp inizio applicazione
+        self.sType = ""             # Tipo e versione applicazione
+        self.sLogFile = ""          # Nome facoltativo del file di Log
+        self.sCommand = ""          # ID del comando corrente
+        self.dictJobs = {}          # Dizionario contenente tutti i dizionari
+        self.sJobEnd = ""           # Nome del file .end di output
         
-        # Log
-        self.objLog = None
-        
-        # Chiavi riservate
-        self.asKeyReserved = [
-            "RETURN.TYPE", "TS.START", "TS.END", "RETURN.VALUE"
-        ]
+        # Variabile per nome procedura corrente (per logging)
+        self.sProc = ""
     
-    # ========== METODO START ==========
-    
-    def Start(self) -> str:
+    # =========================================================================
+    # METODO: Start
+    # =========================================================================
+    def Start(self):
         """
-        Inizializza l'applicazione leggendo o creando il file .ini
+        Metodo principale di avvio.
+        Legge o crea il file .ini, valida i parametri, inizializza il sistema.
         
         Returns:
-            Stringa vuota se successo, messaggio di errore altrimenti
+            str: "" se successo, messaggio di errore altrimenti
         """
-        sProc = "Start"
+        self.sProc = "Start"
         sResult = ""
         
-        try:
-            # Inizializzazioni
-            self.tsStart = aiSys.Timestamp()
-            self.objLog = aiSys.acLog()
-            self.objLog.Start()
-            
-            # Reset campi
-            self.dictJobs = {}
-            self.dictConfig = {}
-            self.sJobIni = ""
-            self.sJobEnd = ""
-            
-            # Verifica parametri
-            if len(sys.argv) < 2:
-                sResult = "NTJOBSAPP: Eseguire con parametro file .ini o nella forma ntjobsapp.py command parametro valore ecc."
-                print(sResult)
-                return sResult
-            
-            # Determina modalità: file .ini o creazione dinamica
-            if not sys.argv[1].lower().endswith(".ini"):
-                # Crea file .ini dai parametri
-                sResult = self.MakeIni()
-                if sResult:
-                    return sResult
-            else:
-                # Usa file .ini esistente
-                self.sJobIni = sys.argv[1]
-            
-            # Verifica esistenza file
-            if not os.path.exists(self.sJobIni):
-                sResult = f"File .ini non esistente {self.sJobIni}"
-                return sResult
-            
-            # Inizializza file end
-            self.sJobEnd = os.path.splitext(self.sJobIni)[0] + ".end"
-            
-            # Inizializza ConfigParser
-            self.objIni = configparser.ConfigParser()
-            self.objIni.optionxform = str
-            
-            # Leggi file .ini
-            try:
-                self.objIni.read(self.sJobIni, encoding='utf-8')
-                print(f"Letto {self.sJobIni}")
-            except Exception as e:
-                sResult = f"Errore lettura {self.sJobIni}: {str(e)}"
-                return sResult
-            
-            # Converti in dizionario
-            asSections = []
-            for section in self.objIni.sections():
-                # Normalizza nome sezione
-                sSection = section.upper().replace(" ", "")
-                asSections.append(sSection)
+        # Inizializza timestamp di inizio
+        self.tsStart = aiSys.Timestamp()
+        
+        # Verifica che ci siano parametri
+        if len(sys.argv) < 2:
+            sResult = "NTJOBSAPP: Eseguire con parametro file .ini o nella forma ntjobsapp.py command parametro valore ecc."
+            print(sResult)
+            return self._return_with_convention(sResult)
+        
+        # Gestione parametri: file .ini o creazione da parametri
+        if not sys.argv[1].lower().endswith('.ini'):
+            # Crea file .ini dai parametri
+            sResult = self.MakeIni()
+            if sResult != "":
+                return self._return_with_convention(sResult)
+        else:
+            # Usa file .ini passato come parametro
+            self.sJobIni = sys.argv[1]
+        
+        # Verifica esistenza file .ini
+        if not os.path.exists(self.sJobIni):
+            sResult = f"File .ini non esistente {self.sJobIni}"
+            return self._return_with_convention(sResult)
+        
+        # Costruisce nome file .end
+        base_name = os.path.splitext(self.sJobIni)[0]
+        self.sJobEnd = base_name + ".end"
+        
+        # Legge file .ini
+        sResult, self.dictJobs = aiSys.read_ini_to_dict(self.sJobIni)
+        if sResult != "":
+            return self._return_with_convention(sResult)
+        
+        print(f"Letto {self.sJobIni}")
+        
+        # Verifica chiavi riservate nelle sezioni (eccetto CONFIG)
+        reserved_keys = ["TS.START", "TS.END", "RETURN.TYPE", "RETURN.VALUE"]
+        reserved_prefix = "RETURN.FILE."
+        
+        for section in self.dictJobs:
+            if section == "CONFIG":
+                continue
                 
-                self.dictJobs[sSection] = {}
+            for key in self.dictJobs[section]:
+                # Verifica chiavi riservate
+                if key in reserved_keys or key.startswith(reserved_prefix):
+                    sResult = f"Usate chiavi riservate {key} nella sezione {section}"
+                    return self._return_with_convention(sResult)
+        
+        # Estrae lista sezioni
+        sections = list(self.dictJobs.keys())
+        sections_str = ", ".join(sections)
+        print(f"Processato {self.sJobIni}, Sezioni {sections_str}")
+        
+        # Verifica esistenza sezione CONFIG
+        if "CONFIG" not in self.dictJobs:
+            sResult = f"Sezione CONFIG non trovata in file {self.sJobIni}"
+            return self._return_with_convention(sResult)
+        
+        # Verifica sezioni JOB e file richiesti
+        for section in self.dictJobs:
+            if section == "CONFIG":
+                continue
                 
-                for key, value in self.objIni[section].items():
-                    # Normalizza chiave
-                    sKey = key.upper().replace(" ", "")
+            dictTemp = self.dictJobs[section].copy()
+            
+            # Verifica presenza COMMAND
+            if "COMMAND" not in dictTemp:
+                sResult += f"Per questa sezione COMMAND non presente: {section}\n"
+                continue
+            
+            # Verifica file richiesti (chiavi che iniziano con "FILE.")
+            for key in list(dictTemp.keys()):
+                if key.startswith("FILE."):
+                    sFile = dictTemp[key]
                     
-                    # Verifica chiavi riservate
-                    if sKey in self.asKeyReserved or sKey.startswith("RETURN.FILE."):
-                        sResult += f"Chiave riservata non utilizzabile: {sKey}\n"
-                        continue
+                    # Ripulisci sFile da eventuali path precedenti
+                    sFile = os.path.basename(sFile)
+                    dictTemp[key] = sFile  # Aggiorna con nome pulito
                     
-                    self.dictJobs[sSection][sKey] = value
-            
-            print(f"Processato {self.sJobIni}, Sezioni: {', '.join(asSections)}")
-            
-            # Verifica sezione CONFIG
-            if "CONFIG" not in self.dictJobs:
-                sResult = "Sezione CONFIG non trovata"
-                return sResult
-            
-            # Estrai configurazione
-            self.dictConfig = self.dictJobs["CONFIG"].copy()
-            
-            # Rimuovi PASSWORD se presente
-            if "PASSWORD" in self.dictConfig:
-                del self.dictConfig["PASSWORD"]
-            
-            # Verifica COMMAND e FILE per ogni job
-            for sSection, dictSection in self.dictJobs.items():
-                if sSection == "CONFIG":
-                    continue
-                
-                # Verifica COMMAND presente
-                if "COMMAND" not in dictSection:
-                    sResult += f"Per questa sezione COMMAND non presente: {sSection}\n"
-                
-                # Verifica file esistono
-                for sKey, sValue in dictSection.items():
-                    if sKey.startswith("FILE."):
-                        sFile = sValue
-                        # Estrai solo nome file se contiene path
-                        sFile = os.path.basename(sFile)
-                        
-                        if not os.path.exists(sFile):
-                            sResult += f"File richiesto non presente {sFile}\n"
-            
-            # Se ci sono errori, esci
-            if sResult:
-                return sResult
-            
-            # Inizializza parametri config
-            self.sLog = self.Config("LOG")
-            self.sType = self.Config("TYPE")
-            self.sName = self.Config("NAME")
-            
-            sExit = self.Config("EXIT")
-            self.bErrExit = sExit.upper() == "TRUE" if sExit else False
-            
-            sExpand = self.Config("EXPAND")
-            self.bExpand = sExpand.upper() == "TRUE" if sExpand else True
-            
-            # Verifiche parametri config
-            if not self.sName:
-                sResult = "NAME non precisato"
-                return sResult
-            
-            if not self.sType.startswith("NTJOBS.APP."):
-                sResult = "Type INI non NTJOBSAPP"
-                return sResult
-            
-            # Espansione variabili
-            if self.bExpand:
-                self.Expand()
-            
-            self.Log0(sResult, f"Start {self.sName} {self.sJobIni}")
+                    # Verifica esistenza file
+                    if not os.path.exists(sFile):
+                        sResult += f"File richiesto non presente {sFile}\n"
         
-        except Exception as e:
-            sResult = f"Errore Start: {str(e)}"
+        # Se ci sono errori nelle verifiche precedenti
+        if sResult != "":
+            return self._return_with_convention(sResult)
         
-        # Diagnostica
-        if sResult:
-            print(f"Eseguita ntjobsapp.{sProc}: {sResult}")
+        # ESPANSIONE E STAMPA PER OGNI SEZIONE (come da specifica)
+        for sKey in self.dictJobs:
+            print(f"Sezione: {sKey}")
+            
+            # Esegui ExpandDict su ogni sezione
+            aiSys.ExpandDict(self.dictJobs[sKey], self.dictJobs["CONFIG"])
+            
+            # Esegui DictPrint su ogni sezione
+            aiSys.DictPrint(self.dictJobs[sKey])
         
-        return sResult
+        # Estrae parametri di configurazione
+        sTemp = self.Config("LOG")
+        if sTemp != "":
+            self.sLogFile = sTemp
+        
+        self.sType = self.Config("TYPE")
+        self.sName = self.Config("NAME")
+        self.bErrExit = aiSys.StringBool(self.Config("EXIT"))
+        
+        # Avvia sistema di log
+        sResult = self.jLog.Start(self.sLogFile)
+        if sResult != "":
+            return self._return_with_convention(sResult)
+        
+        # Rimuove password dalla configurazione (se presente)
+        if "PASSWORD" in self.dictJobs.get("CONFIG", {}):
+            del self.dictJobs["CONFIG"]["PASSWORD"]
+        
+        # Verifiche finali sui parametri config
+        if self.sName == "":
+            sResult = "NAME APP non precisato"
+        
+        if self.sType is not None and not str(self.sType).startswith("NTJOBS.APP."):
+            sResult = "Type INI non NTJOBSAPP"
+        
+        # Log finale e ritorno
+        self.Log0(sResult)
+        return self._return_with_convention(sResult)
     
-    # ========== METODO MAKEINI ==========
-    
-    def MakeIni(self) -> str:
+    # =========================================================================
+    # METODO: MakeIni
+    # =========================================================================
+    def MakeIni(self):
         """
-        Crea file .ini dai parametri command line
+        Crea un file .ini dai parametri passati da linea di comando.
+        
+        Formato: python acJobsApp.py command key1 value1 key2 value2 ...
         
         Returns:
-            Stringa vuota se successo, messaggio di errore altrimenti
+            str: "" se successo, messaggio di errore altrimenti
         """
-        sProc = "MakeIni"
+        self.sProc = "MakeIni"
         sResult = ""
+        self.sJobIni = ""
         
+        # Verifica numero parametri (deve essere 1 + multiplo di 2)
+        # 1 per il comando, + coppie chiave-valore
+        if (len(sys.argv) - 1) % 2 != 1:
+            sResult = "Errore numero parametri comando chiave=valore ecc."
+            return self._return_with_convention(sResult)
+        
+        # Estrae comando (primo parametro dopo nome script)
+        sCommand = sys.argv[1]
+        
+        # Crea dizionario temporaneo con coppie chiave-valore
+        dictTemp = {}
+        i = 2  # Inizia dal terzo parametro (dopo script e comando)
+        while i < len(sys.argv):
+            key = sys.argv[i]
+            # Verifica se c'è un valore successivo
+            if i + 1 >= len(sys.argv):
+                sResult = f"Valore mancante per chiave: {key}"
+                return self._return_with_convention(sResult)
+            
+            value = sys.argv[i + 1]
+            
+            # Rimuove virgolette se presenti
+            if key.startswith('"') and key.endswith('"'):
+                key = key[1:-1]
+            if value.startswith('"') and value.endswith('"'):
+                value = value[1:-1]
+            
+            dictTemp[key] = value
+            i += 2
+        
+        # Crea file .ini
+        sFileTemp = "ntjobsapp.ini"
         try:
-            self.sJobIni = ""
-            dictTemp = {}
-            
-            # Verifica numero parametri (deve essere dispari: 1 + multipli di 2)
-            nParams = len(sys.argv)
-            if (nParams - 1) % 2 != 0 and nParams > 1:
-                # Accettiamo anche solo il comando senza parametri
-                if nParams == 2:
-                    pass  # OK: solo comando
-                else:
-                    sResult = "Errore numero parametri comando chiave=valore ecc."
-                    return sResult
-            
-            # Primo parametro è il comando
-            sCommand = sys.argv[1].strip('"\'')
-            
-            # Parametri successivi a coppie
-            for i in range(2, nParams, 2):
-                if i + 1 < nParams:
-                    sKey = sys.argv[i].strip('"\'')
-                    sValue = sys.argv[i + 1].strip('"\'')
-                    dictTemp[sKey] = sValue
-            
-            # Crea file ntjobsapp.ini
-            sFileTemp = os.path.join(os.path.dirname(__file__), "ntjobsapp.ini")
-            
-            config = configparser.ConfigParser()
-            config.optionxform = str
-            
-            # Sezione CONFIG
-            config["CONFIG"] = {
-                "TYPE": "NTJOBS.APP.2"
-            }
-            
-            # Sezione APP
-            config["APP"] = {
-                "COMMAND": sCommand
-            }
-            
-            # Aggiungi parametri
-            for sKey, sValue in dictTemp.items():
-                config["APP"][sKey] = sValue
-            
-            # Salva file
-            try:
-                with open(sFileTemp, 'w', encoding='utf-8') as f:
-                    config.write(f)
+            with open(sFileTemp, 'w', encoding='utf-8') as f:
+                # Sezione CONFIG
+                f.write("[CONFIG]\n")
+                f.write("TYPE=NTJOBS.APP.1\n")
+                f.write("\n")
                 
-                self.sJobIni = sFileTemp
-            except Exception as e:
-                sResult = f"Errore creazione file {sFileTemp}: {str(e)}"
-        
+                # Sezione JOB_01
+                f.write("[JOB_01]\n")
+                f.write(f"COMMAND={sCommand}\n")
+                
+                # Altre chiavi-valori
+                for key, value in dictTemp.items():
+                    f.write(f"{key}={value}\n")
+            
+            self.sJobIni = sFileTemp
+            
         except Exception as e:
-            sResult = f"Errore MakeIni: {str(e)}"
+            sResult = f"Errore creazione file .ini: {str(e)}"
         
-        # Diagnostica
-        if sResult:
-            print(f"Eseguita ntjobsapp.{sProc}: {sResult}")
-        
-        return sResult
+        return self._return_with_convention(sResult)
     
-    # ========== METODI CONFIGURAZIONE ==========
-    
-    def Config(self, sKey: str) -> str:
+    # =========================================================================
+    # METODO: Config
+    # =========================================================================
+    def Config(self, sKey):
         """
-        Ritorna valore configurazione
+        Restituisce il valore di una chiave dalla sezione CONFIG.
         
         Args:
-            sKey: Chiave da cercare
+            sKey (str): Chiave da cercare
             
         Returns:
-            Valore della chiave o stringa vuota
+            str: Valore della chiave o stringa vuota se non trovata
         """
-        # Normalizza chiave
-        sKey = sKey.upper().replace(" ", "")
-        
-        return self.dictConfig.get(sKey, "")
+        # Usa get per evitare KeyError se CONFIG non esiste
+        config_section = self.dictJobs.get("CONFIG", {})
+        return aiSys.Config(config_section, sKey)
     
-    def AddTimestamp(self, dictTemp: Dict) -> None:
+    # =========================================================================
+    # METODO: AddTimestamp
+    # =========================================================================
+    def AddTimestamp(self, dictTemp):
         """
-        Aggiunge timestamp a dizionario
+        Aggiunge o sostituisce timestamp TS.START e TS.END in un dizionario.
         
         Args:
-            dictTemp: Dizionario da aggiornare
+            dictTemp (dict): Dizionario da aggiornare (per riferimento)
         """
         dictTemp["TS.START"] = self.tsStart
         dictTemp["TS.END"] = aiSys.Timestamp()
     
-    # ========== METODO RETURN ==========
-    
-    def Return(self, sResult: str, sValue: str = "", 
-               dictFiles: Optional[Dict[str, str]] = None) -> str:
+    # =========================================================================
+    # METODO: Return
+    # =========================================================================
+    def Return(self, sResult, sValue="", dictFiles=None):
         """
-        Aggiorna risultato elaborazione corrente
+        Aggiorna i risultati dell'elaborazione corrente.
+        Chiamato dalla funzione callback cbCommands.
         
         Args:
-            sResult: Risultato elaborazione ("" = successo)
-            sValue: Valore di ritorno opzionale
-            dictFiles: Dizionario file di ritorno {id: filename}
+            sResult (str): Risultato dell'elaborazione (""=successo)
+            sValue (str): Valore facoltativo di ritorno
+            dictFiles (dict): Dizionario file da restituire {id: nome_file}
             
         Returns:
-            sResult
+            str: "" se successo, messaggio di errore altrimenti
         """
-        sProc = "Return"
+        self.sProc = "Return"
         
-        try:
-            # Determina tipo ritorno
-            if sResult:
-                sReturnType = "E"
-                if not sValue:
-                    sValue = sResult
-            else:
-                sReturnType = "S"
-            
-            # Gestione file di ritorno
-            if dictFiles:
-                for sFileId, sFileName in dictFiles.items():
-                    # Estrai solo nome file
-                    sFileName = os.path.basename(sFileName)
-                    
-                    # Verifica esistenza nella cartella corrente
-                    if not os.path.exists(sFileName):
-                        sResult = f"Errore file non presente: {sFileName}"
-                        sReturnType = "E"
-                        break
-                    
-                    # Aggiungi a dictJob
-                    self.dictJob[f"RETURN.FILE.{sFileId}"] = sFileName
+        # Determina tipo di ritorno
+        if sResult != "":
+            sReturnType = "E"  # Errore
+        else:
+            sReturnType = "S"  # Successo
+        
+        # Se sValue è vuoto e c'è errore, usa sResult come valore
+        if sValue == "" and sReturnType == "E":
+            sValue = sResult
+        
+        # Gestione file di ritorno
+        if dictFiles is not None:
+            file_counter = 1
+            for file_id, file_name in dictFiles.items():
+                # Prende solo nome file senza path
+                clean_name = os.path.basename(file_name)
                 
-                # Se non c'era già un tipo ritorno, impostalo a S
-                if not sReturnType:
-                    sReturnType = "S"
-            
-            # Aggiungi risultati
-            self.dictJob["RETURN.TYPE"] = sReturnType
-            self.dictJob["RETURN.VALUE"] = sValue
-            
-            # Aggiungi timestamp
-            self.AddTimestamp(self.dictJob)
-        
-        except Exception as e:
-            sResult = f"Errore Return: {str(e)}"
-        
-        # Diagnostica
-        if sResult:
-            print(f"Eseguita ntjobsapp.{sProc}: {sResult}")
-        
-        return sResult
-    
-    # ========== METODO EXPAND ==========
-    
-    def Expand(self) -> None:
-        """Espande variabili nei settings usando $VARIABILE"""
-        sProc = "Expand"
-        
-        try:
-            if not self.bExpand:
-                return
-            
-            print("Espansione dei settings")
-            
-            # Espandi tutti i job eccetto CONFIG
-            for sSection, dictSection in self.dictJobs.items():
-                if sSection == "CONFIG":
-                    continue
+                # Verifica esistenza file nella cartella corrente
+                if not os.path.exists(clean_name):
+                    sResult = f"Errore file non presente: {clean_name}"
+                    return self._return_with_convention(sResult)
                 
-                # Espandi ogni valore
-                for sKey in list(dictSection.keys()):
-                    sValue = dictSection[sKey]
-                    
-                    if isinstance(sValue, str):
-                        dictSection[sKey] = aiSys.Expand(sValue, self.dictConfig)
+                # Aggiunge prefisso RETURN.FILE. con formato a 2 cifre
+                return_key = f"RETURN.FILE.{file_counter:02d}"
+                self.dictJob[return_key] = clean_name
+                file_counter += 1
         
-        except Exception as e:
-            print(f"Errore Expand: {str(e)}")
+        # Se sReturnType è vuoto, imposta a "S" (Successo)
+        if sReturnType == "":
+            sReturnType = "S"
+        
+        # Aggiorna dizionario job corrente
+        self.dictJob["RETURN.TYPE"] = sReturnType
+        self.dictJob["RETURN.VALUE"] = sValue
+        
+        # Aggiunge timestamp
+        self.AddTimestamp(self.dictJob)
+        
+        return self._return_with_convention(sResult)
     
-    # ========== METODO RUN ==========
-    
-    def Run(self, cbCommands: Callable[[], str]) -> str:
+    # =========================================================================
+    # METODO: Run
+    # =========================================================================
+    def Run(self, cbCommands):
         """
-        Esegue tutti i job in sequenza
+        Esegue tutti i jobs definiti nel file .ini.
         
         Args:
-            cbCommands: Funzione callback da eseguire per ogni job
+            cbCommands (function): Funzione callback da chiamare per ogni job
             
         Returns:
-            Stringa vuota se successo, messaggio di errore altrimenti
+            str: "" se tutti i job hanno successo, altrimenti messaggio errore
         """
-        sProc = "Run"
+        self.sProc = "Run"
         sResult = ""
         
-        try:
-            # Esegui ogni job
-            for sKey, dictSection in self.dictJobs.items():
-                if sKey == "CONFIG":
-                    continue
-                
-                print(f"Esecuzione Action {sKey}")
-                
-                # Copia job corrente
-                self.dictJob = dictSection.copy()
-                self.sJobId = sKey
-                self.sCommand = self.dictJob.get("COMMAND", "")
-                
-                # Log inizio
-                self.Log1(f"Eseguo il comando: {self.sCommand}, Sezione: {sKey}, "
-                         f"TS: {aiSys.Timestamp()}")
-                
-                # Esegui callback
-                sResult = cbCommands()
-                
-                # Aggiorna job in dictJobs
-                self.dictJobs[sKey] = self.dictJob.copy()
-                
-                # Log fine
-                self.Log1(f"Eseguito il comando: {self.sCommand}, Sezione: {sKey}, "
-                         f"TS: {aiSys.Timestamp()}, Risultato: {sResult}")
-                
-                # Esci se errore e bErrExit attivo
-                if sResult and self.bErrExit:
-                    break
+        # Itera su tutte le sezioni (eccetto CONFIG)
+        for sKey in self.dictJobs:
+            if sKey == "CONFIG":
+                continue
+            
+            print(f"Esecuzione Command {sKey}")
+            
+            # Copia il dizionario del job corrente
+            self.dictJob = self.dictJobs[sKey].copy()
+            
+            # Estrae comando
+            self.sCommand = aiSys.DictExist(self.dictJob, "COMMAND", "")
+            
+            if self.sCommand == "":
+                sResult = f"COMMAND non trovato in {sKey}"
+                self.Log(sResult)
+                # Continua con il prossimo job (non esce)
+                continue
+            
+            # Esegue il comando tramite callback
+            self.Log1(f"Eseguo il comando: {self.sCommand}, Sezione: {sKey}, TS: {aiSys.Timestamp()}, Risultato: {sResult}")
+            
+            sResult = cbCommands(self.dictJob)
+            
+            # Aggiorna il dizionario originale con i risultati
+            self.dictJobs[sKey] = self.dictJob.copy()
+            
+            self.Log1(f"Eseguito il comando: {self.sCommand}, Sezione: {sKey}, TS: {aiSys.Timestamp()}, Risultato: {sResult}")
+            
+            # Se bErrExit=True e c'è errore, esce dal ciclo
+            if self.bErrExit and sResult != "":
+                break
         
-        except Exception as e:
-            sResult = f"Errore Run: {str(e)}"
-        
-        return sResult
+        return self._return_with_convention(sResult)
     
-    # ========== METODO END ==========
-    
-    def End(self, sResult: str) -> int:
+    # =========================================================================
+    # METODO: End
+    # =========================================================================
+    def End(self, sResult):
         """
-        Finalizza applicazione e salva risultati
+        Metodo finale: salva risultati, log e termina applicazione.
         
         Args:
-            sResult: Risultato finale elaborazione
+            sResult (str): Risultato finale dell'esecuzione
             
         Returns:
-            Codice uscita (0=OK, 1=errore Start, 2=errore Run)
+            int: Codice di uscita (0=OK, 1=Errore INI, 2=Errore job)
         """
-        sProc = "End"
-        nResult = 0
+        self.sProc = "End"
         bIsFatalError = False
+        nResult = 0
         
-        try:
-            # FASE 1: Determinazione codice uscita
-            if not self.dictJobs:
-                nResult = 1
-                
-                if sResult:
-                    # Inizializza struttura minima per salvare errore
-                    self.dictJobs = {"CONFIG": {}}
-                    bIsFatalError = True
-            
-            elif sResult:
-                # Errore da Run
-                nResult = 2
-                bIsFatalError = True
-            
-            # FASE 2: Aggiornamento dati errore
-            if bIsFatalError:
-                dictTemp = {
-                    "RETURN.TYPE": "E",
-                    "RETURN.VALUE": sResult
-                }
-                
-                self.AddTimestamp(dictTemp)
-                
-                # Aggiorna CONFIG
-                self.dictConfig.update(dictTemp)
-                self.dictJobs["CONFIG"] = self.dictConfig.copy()
-            
-            # FASE 3: Salvataggio e uscita
-            # Salva file .end
-            config = configparser.ConfigParser()
-            config.optionxform = str
-            
-            for sSection, dictSection in self.dictJobs.items():
-                config[sSection] = {}
-                for sKey, sValue in dictSection.items():
-                    config[sSection][sKey] = str(sValue)
-            
-            try:
-                with open(self.sJobEnd, 'w', encoding='utf-8') as f:
-                    config.write(f)
-                
-                print(f"Salvato {self.sJobEnd}")
-            except Exception as e:
-                print(f"Errore salvataggio {self.sJobEnd}: {str(e)}")
-                if nResult == 0:
-                    nResult = 1
-            
-            # Log finale
-            self.Log(sResult, f"Fine applicazione {self.sName}")
+        # Fase 1: Determina codice di uscita
+        if not self.dictJobs:
+            # Errore di Start: dictJobs vuoto
+            nResult = 1
+            self.dictJobs = {"CONFIG": {}}
+            bIsFatalError = True
+        elif sResult != "":
+            # Errore in uno o più job
+            nResult = 2
+            bIsFatalError = True
         
-        except Exception as e:
-            print(f"Errore End: {str(e)}")
-            if nResult == 0:
-                nResult = 1
+        # Crea dizionario temporaneo
+        dictTemp = {
+            "RETURN.TYPE": "",
+            "RETURN.VALUE": ""
+        }
         
-        # Diagnostica
-        if sResult:
-            print(f"Eseguita ntjobsapp.{sProc}: {sResult}")
+        # Se errore fatale, aggiorna tipo e valore
+        if bIsFatalError:
+            dictTemp["RETURN.TYPE"] = "E"
+            dictTemp["RETURN.VALUE"] = sResult
         
+        # Aggiunge timestamp in ogni caso
+        self.AddTimestamp(dictTemp)
+        
+        # Propaga aggiornamenti alla sezione CONFIG
+        if "CONFIG" not in self.dictJobs:
+            self.dictJobs["CONFIG"] = {}
+        
+        # Unisci con priorità a dictTemp (sovrascrive se esiste già)
+        self.dictJobs["CONFIG"].update(dictTemp)
+        
+        # Fase 3: Salva file .end
+        sSaveResult = aiSys.save_dict_to_ini(self.dictJobs, self.sJobEnd)
+        if sSaveResult == "":
+            print(f"Creato file {self.sJobEnd}")
+        
+        # Log finale
+        self.Log(sSaveResult, f"Fine applicazione {self.sName}")
+        
+        # Ritorna codice di uscita
         return nResult
     
-    # ========== METODI LOG ==========
+    # =========================================================================
+    # METODI DI LOG (remapping)
+    # =========================================================================
+    def Log(self, sMsg, sExtra=""):
+        """
+        Remapping di self.jLog.Log()
+        """
+        return self.jLog.Log(sMsg, sExtra)
     
-    def Log(self, sResult: str = "", sValue: str = "") -> None:
-        """Log generico"""
-        if self.objLog:
-            self.objLog.Log("INFO" if not sResult else "ERR", 
-                           f"{sResult}: {sValue}" if sResult else sValue)
+    def Log0(self, sMsg):
+        """
+        Remapping di self.jLog.Log0()
+        """
+        return self.jLog.Log0(sMsg)
     
-    def Log0(self, sResult: str, sValue: str = "") -> None:
-        """Log con verifica errore"""
-        if self.objLog:
-            self.objLog.Log0(sResult, sValue)
+    def Log1(self, sMsg):
+        """
+        Remapping di self.jLog.Log1()
+        """
+        return self.jLog.Log1(sMsg)
     
-    def Log1(self, sValue: str) -> None:
-        """Log info"""
-        if self.objLog:
-            self.objLog.Log1(sValue)
+    # =========================================================================
+    # METODO PRIVATO: Gestione convenzione messaggi
+    # =========================================================================
+    def _return_with_convention(self, sResult):
+        """
+        Gestisce la convenzione di stampa dei messaggi.
+        Stampa "Eseguita ntjobsapp.<sProc>: <sResult>" se sResult non è vuoto.
+        
+        Args:
+            sResult (str): Risultato da ritornare
+            
+        Returns:
+            str: Il risultato in input
+        """
+        # Se sResult non è vuoto, stampa secondo la convenzione
+        if sResult != "":
+            print(f"Eseguita ntjobsapp.{self.sProc}: {sResult}")
+        
+        # Ritorna sempre sResult (vuoto o meno)
+        return sResult
 
 
-# ========== VARIABILE GLOBALE ==========
-
-jData: Optional[ncJobsApp] = None
-
-
-# ========== FUNZIONE CALLBACK ESEMPIO ==========
-
-def cbCommands() -> str:
+# =============================================================================
+# ESEMPIO DI UTILIZZO CON CALLBACK PERSONALIZZATA
+# =============================================================================
+def esempio_callback(dictJob):
     """
-    Funzione callback di esempio per eseguire comandi
+    Esempio di funzione callback che può essere passata a Run().
+    Questa funzione dovrebbe essere implementata dall'utente per eseguire
+    i comandi specifici dell'applicazione.
     
-    Questa funzione deve essere personalizzata dall'utente per
-    implementare la logica specifica dell'applicazione.
-    
-    La funzione ha accesso a:
-    - jData.sCommand: comando da eseguire
-    - jData.dictJob: dizionario parametri job corrente
-    - jData.sJobId: ID del job corrente
-    
-    Deve chiamare jData.Return() per registrare il risultato
-    
+    Args:
+        dictJob (dict): Dizionario con parametri del job corrente
+        
     Returns:
-        Stringa vuota se successo, messaggio errore altrimenti
+        str: "" se successo, messaggio di errore altrimenti
     """
-    sResult = ""
-    
-    try:
-        print(f"Esecuzione comando: {jData.sCommand}")
-        
-        # Esempio: gestione comandi base
-        if jData.sCommand == "TEST":
-            # Test semplice
-            sResult = ""
-            sValue = "Test eseguito con successo"
-            jData.Return(sResult, sValue)
-        
-        elif jData.sCommand == "ECHO":
-            # Echo parametri
-            sMessage = jData.dictJob.get("MESSAGE", "Hello World")
-            sResult = ""
-            jData.Return(sResult, f"Echo: {sMessage}")
-        
-        elif jData.sCommand == "ERROR":
-            # Simula errore
-            sResult = "Errore simulato per test"
-            jData.Return(sResult)
-        
-        else:
-            # Comando non riconosciuto
-            sResult = f"Comando non riconosciuto: {jData.sCommand}"
-            jData.Return(sResult)
-    
-    except Exception as e:
-        sResult = f"Errore esecuzione comando: {str(e)}"
-        jData.Return(sResult)
-    
-    return sResult
-
-
-# ========== FUNZIONE PRINCIPALE ==========
-
-def main() -> int:
-    """
-    Funzione principale dell'applicazione
-    
-    Returns:
-        Codice uscita (0=OK, 1=errore Start, 2=errore Run)
-    """
+    # Accede all'istanza globale jData
     global jData
     
-    try:
-        # Inizializza istanza globale
-        jData = ncJobsApp()
-        
-        # Start
-        sResult = jData.Start()
-        
-        if sResult:
-            print(f"Errore Start: {sResult}")
-            return jData.End(sResult)
-        
-        # Run
-        sResult = jData.Run(cbCommands)
-        
-        # End
-        nResult = jData.End(sResult)
-        
-        return nResult
+    command = dictJob.get("COMMAND", "")
+    print(f"  [Callback] Esecuzione comando: {command}")
     
-    except KeyboardInterrupt:
-        print("\nInterruzione da tastiera")
-        return 1
+    # ESEMPIO: implementazione comandi
+    if command == "NOME_AZIONE":
+        print(f"    Elaborazione per {command}")
+        
+        # Esempio: leggi file se specificato
+        if "FILE.ID1" in dictJob:
+            file_name = dictJob["FILE.ID1"]
+            try:
+                with open(file_name, 'r') as f:
+                    content = f.read()
+                print(f"    Letto file {file_name}: {len(content)} bytes")
+            except Exception as e:
+                jData.Return(f"Errore lettura file {file_name}", str(e))
+                return f"Errore lettura file {file_name}"
+        
+        # Segnala successo
+        jData.Return("", f"Comando {command} eseguito con successo")
+        return ""
     
-    except Exception as e:
-        print(f"Errore fatale: {str(e)}")
-        return 1
+    elif command == "COPIA_FILE":
+        # Esempio: copia file
+        source = dictJob.get("SOURCE", "")
+        dest = dictJob.get("DEST", "")
+        
+        if not source or not dest:
+            jData.Return("Parametri SOURCE o DEST mancanti", "Parametri insufficienti")
+            return "Parametri insufficienti"
+        
+        try:
+            import shutil
+            shutil.copy2(source, dest)
+            print(f"    Copiato {source} -> {dest}")
+            
+            # Restituisci file come risultato
+            jData.Return("", f"File copiato: {dest}", {"01": dest})
+            return ""
+        except Exception as e:
+            jData.Return(f"Errore copia file: {str(e)}", str(e))
+            return f"Errore copia file: {str(e)}"
+    
+    else:
+        error_msg = f"Comando non riconosciuto: {command}"
+        jData.Return(error_msg, error_msg)
+        return error_msg
 
 
-# ========== ENTRY POINT ==========
+# =============================================================================
+# FUNZIONE PRINCIPALE
+# =============================================================================
+def main():
+    """
+    Punto di ingresso principale dell'applicazione.
+    Segue esattamente la logica descritta nella specifica.
+    """
+    # 1. Crea istanza di acJobsApp in variabile globale jData
+    global jData
+    jData = acJobsApp()
+    
+    # 2. Esegui sResult=jData.Start()
+    sResult = jData.Start()
+    
+    # 3. Se sResult diverso da "":
+    if sResult != "":
+        # a. Esegui il metodo self.End(sResult)
+        error_code = jData.End(sResult)
+        # b. Esci dall'applicazione
+        sys.exit(error_code)
+    
+    # 4. Esegui sResult=jData.Run() con callback di esempio
+    sResult = jData.Run(esempio_callback)
+    
+    # 5. Esegui il metodo self.End(sResult)
+    error_code = jData.End(sResult)
+    
+    # 6. Esci dall'applicazione
+    sys.exit(error_code)
 
+
+# Punto di ingresso
 if __name__ == "__main__":
-    sys.exit(main())
+    main()

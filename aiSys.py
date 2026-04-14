@@ -7,7 +7,10 @@ Importa tutti i moduli e li espone nel namespace aiSys
 
 import os
 import sys
+<<<<<<< HEAD
 from pathlib import Path
+=======
+>>>>>>> bfee79e9a1dd5326014a7baaa0699a53f6462d9d
 
 # Importa TUTTE le funzioni da tutti i moduli
 # =============================================================================
@@ -249,10 +252,13 @@ __all__.extend([
 # FUNZIONE PRINCIPALE
 # =============================================================================
 
+<<<<<<< HEAD
 def FileExists(sFile):
     """Ritorna True se il file esiste, False altrimenti."""
     return Path(sFile).is_file()
 
+=======
+>>>>>>> bfee79e9a1dd5326014a7baaa0699a53f6462d9d
 def __main__():
     """
     Funzione principale di aiSys.py.

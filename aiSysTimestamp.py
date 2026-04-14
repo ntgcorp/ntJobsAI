@@ -1,7 +1,11 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
+<<<<<<< HEAD
 aiSysTimestamp.py - Libreria per la gestione dei Timestamp
+=======
+aiSysTimestamp.py - Libreria per la gestione dei timestamp
+>>>>>>> bfee79e9a1dd5326014a7baaa0699a53f6462d9d
 """
 
 import os
@@ -17,10 +21,17 @@ loc_ErrorProc = ErrorProc
 
 def Timestamp(sPostfix: str = "") -> str:
     """
+<<<<<<< HEAD
     Genera un Timestamp nel formato AAAAMMGG:HHMMSS.
     
     Args:
         sPostfix: Suffisso opzionale da aggiungere al Timestamp
+=======
+    Genera un timestamp nel formato AAAAMMGG:HHMMSS.
+    
+    Args:
+        sPostfix: Suffisso opzionale da aggiungere al timestamp
+>>>>>>> bfee79e9a1dd5326014a7baaa0699a53f6462d9d
     
     Returns:
         str: Timestamp formattato, stringa vuota in caso di errore
@@ -193,11 +204,19 @@ def TimestampValidate(sTimestamp: str) -> bool:
 
 def TimestampDiff(sTimestamp1: str, sTimestamp2: str, sMode: str = "s") -> Union[int, float, None]:
     """
+<<<<<<< HEAD
     Calcola la differenza tra due Timestamp.
     
     Args:
         sTimestamp1: Primo Timestamp
         sTimestamp2: Secondo Timestamp
+=======
+    Calcola la differenza tra due timestamp.
+    
+    Args:
+        sTimestamp1: Primo timestamp
+        sTimestamp2: Secondo timestamp
+>>>>>>> bfee79e9a1dd5326014a7baaa0699a53f6462d9d
         sMode: "d" per giorni, "s" per secondi
     
     Returns:
@@ -227,7 +246,11 @@ def TimestampDiff(sTimestamp1: str, sTimestamp2: str, sMode: str = "s") -> Union
 
 def TimestampAdd(sTimestamp: str, nValue: Union[int, float], sUnit: str = "s") -> str:
     """
+<<<<<<< HEAD
     Aggiunge tempo a un Timestamp.
+=======
+    Aggiunge tempo a un timestamp.
+>>>>>>> bfee79e9a1dd5326014a7baaa0699a53f6462d9d
     
     Args:
         sTimestamp: Timestamp di partenza
@@ -235,7 +258,11 @@ def TimestampAdd(sTimestamp: str, nValue: Union[int, float], sUnit: str = "s") -
         sUnit: "s" per secondi, "d" per giorni, "m" per minuti, "h" per ore
     
     Returns:
+<<<<<<< HEAD
         str: Nuovo Timestamp, stringa vuota in caso di errore
+=======
+        str: Nuovo timestamp, stringa vuota in caso di errore
+>>>>>>> bfee79e9a1dd5326014a7baaa0699a53f6462d9d
     """
     sProc = "TimestampAdd"
     try:
@@ -244,7 +271,11 @@ def TimestampAdd(sTimestamp: str, nValue: Union[int, float], sUnit: str = "s") -
         
         seconds = TimestampConvert(sTimestamp, "s")
         if seconds is None:
+<<<<<<< HEAD
             return loc_ErrorProc("Conversione Timestamp fallita", sProc)
+=======
+            return loc_ErrorProc("Conversione timestamp fallita", sProc)
+>>>>>>> bfee79e9a1dd5326014a7baaa0699a53f6462d9d
         
         if sUnit.lower() == "s":
             seconds_to_add = nValue

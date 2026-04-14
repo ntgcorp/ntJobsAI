@@ -13,16 +13,25 @@ https://drive.google.com/drive/folders/1LE2lc7mdW9kKMZOPh1Yoo6eADkx8E5JT?usp=dri
 
 Execution:  
    
+<<<<<<< HEAD
    ntJobsAi2.cmd   
    pyn.cmd ntJobsApp.py action -parameter_key -parameter_value eccc...   
    pyn.cmd ntJobsApp.py ntjobsapp.ini 
    pyt.cmd Tools caller of pyt.py
+=======
+   pyn.cmd ntJobsOS.py
+   
+   pyn.cmd ntJobsApp.py action -parameter_key -parameter_value eccc...
+   
+   pyn.cmd ntJobsApp.py ntjobsapp.ini 
+>>>>>>> bfee79e9a1dd5326014a7baaa0699a53f6462d9d
    
    See ntjobs_app_man_*.pdf for info
    
 ----------------- ntJobsPy Conventions --------------------------
 
   sResult = Return string as ntJobs in case of single returns
+<<<<<<< HEAD
  
   ntj_    = ntJobs Applications (FrontEnd for special cases) 
   ntjobos = ntJobsOS Start Applications.
@@ -31,3 +40,15 @@ Execution:
   ac*     = ntJos Only Classes AI Generated
   nl*     = ntJobs Libraries (not ai Generated)
   nc*     = OS and FrontEnd Class (called from ntJobs Apps, not AI Generated)
+=======
+  lResult = Return list with multiple returns since it is not possible to modify global variables or byRef in Python. Where 0 = sResult
+  NF_ErrorProc = Construction of the return error string with the name of the Proc where it occurs
+  
+  ntj_    = ntJobs Applications (FrontEnd for special cases) 
+  ntJobsOS= ntJobsOS Start Applications.
+  aiJobsOS= ntJobsOS AI Generated Application
+  ai*     = ntJobs Manual Application & Funcions Libraries AI Generated
+  ac*     =  ntJos Only Classes AI Generated
+  nl*     = ntJobs Libraries
+  nc*     = OS and FrontEnd Class (called from ntJobs Apps)
+>>>>>>> bfee79e9a1dd5326014a7baaa0699a53f6462d9d

@@ -35,7 +35,11 @@ class acJobsStart:
         print("Esecuzione aiJobsOS " + sProc)
         
         # Timestamp inizio sessione
+<<<<<<< HEAD
         self.tsStart = aiSys.Timestamp()
+=======
+        self.tsStart = aiSys.TimeStamp()
+>>>>>>> bfee79e9a1dd5326014a7baaa0699a53f6462d9d
         self.tsSearch = self.tsStart
         
         # Cartella di esecuzione dell'applicazione
@@ -109,7 +113,10 @@ class acJobsStart:
         print("Lettura file " + sFileIni)
         
         sResult, dictTemp = aiSys.read_ini_to_dict(sFileIni)
+<<<<<<< HEAD
         print("Risultato lettura " + sFileIni + ", " + sResult)
+=======
+>>>>>>> bfee79e9a1dd5326014a7baaa0699a53f6462d9d
         
         if sResult == "":
             print("Impostazioni di default")
@@ -132,9 +139,14 @@ class acJobsStart:
             
             print("Espansione dizionario Config")
             dictTemp2 = deepcopy(dictTemp)
+<<<<<<< HEAD
             aiSys.ExpandDict(dictTemp, dictTemp2)    
             aiSys.DictPrint(self.dictTemp)
       
+=======
+            aiSys.ExpandDict(dictTemp, dictTemp2)
+            
+>>>>>>> bfee79e9a1dd5326014a7baaa0699a53f6462d9d
             self.JOBS_TAB_CONFIG = deepcopy(dictTemp)
             self.ConfigUpdate()
             
